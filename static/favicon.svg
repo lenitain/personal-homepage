@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="4" fill="#2D353B"/>
+
+  <!-- Scroll body -->
+  <rect x="4" y="4" width="24" height="24" rx="1" fill="#343F44" stroke="#4F585E" stroke-width="0.6"/>
+
+  <!-- Top curl -->
+  <path d="M4 6 Q4 2 8 2 L24 2 Q28 2 28 6" fill="#3D484D" stroke="#4F585E" stroke-width="0.6"/>
+
+  <!-- Bottom curl -->
+  <path d="M4 26 Q4 30 8 30 L24 30 Q28 30 28 26" fill="#3D484D" stroke="#4F585E" stroke-width="0.6"/>
+
+  <!-- Text lines -->
+  <line x1="8" y1="10" x2="17" y2="10" stroke="#D3C6AA" stroke-width="1.2" stroke-linecap="round" opacity="0.7"/>
+  <line x1="8" y1="15" x2="24" y2="15" stroke="#D3C6AA" stroke-width="1.2" stroke-linecap="round" opacity="0.5"/>
+  <line x1="8" y1="20" x2="15" y2="20" stroke="#A7C080" stroke-width="1.2" stroke-linecap="round" opacity="0.8"/>
+  <rect x="16.5" y="18.8" width="6" height="3" fill="#A7C080" opacity="0.6" rx="0.3"/>
+</svg>
