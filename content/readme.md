@@ -4,10 +4,10 @@ Welcome. Navigate with your keyboard:
 
 | Key              | Action           |
 | ---------------- | ---------------- |
-| `↓` / `j`        | Move down        |
-| `↑` / `k`        | Move up          |
-| `Enter` / `→` / `l` | Open dir         |
-| `Esc` / `←` / `h`   | Go to parent dir |
+| `↓`              | Move down        |
+| `↑`              | Move up          |
+| `Enter` / `→`    | Open dir         |
+| `Esc` / `←`      | Go to parent dir |
 
 Use the file browser on the left to explore.
 Content appears on the right.

@@ -59,7 +59,7 @@ DOM / JS / media / connections die with the tab. The lingering renderer isn't a 
 
 The server is qutebrowser, kept resident. It's Python because that's what qutebrowser is.
 
-The launcher sits on the hot path. A Python version has to start the interpreter and import `socket` and `json` before it can reach the socket: about 25 ms. A C binary has no interpreter or imports to pay: it just lists the socket and does one write, in about 2–4 ms.
+The launcher sits on the hot path. A Python version has to start the interpreter and import `socket` and `json` before it can reach the socket: about 25 ms. A C binary just lists the socket and does one write, in about 2–4 ms.
 
 ## The takeaway
 

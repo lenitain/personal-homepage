@@ -59,25 +59,21 @@
 	function handleKeydown(e: KeyboardEvent) {
 		switch (e.key) {
 			case 'ArrowDown':
-			case 'j':
 				e.preventDefault();
 				select(selectedIndex + 1);
 				break;
 			case 'ArrowUp':
-			case 'k':
 				e.preventDefault();
 				select(selectedIndex - 1);
 				break;
 			case 'Enter':
 			case 'ArrowRight':
-			case 'l':
 				e.preventDefault();
 				if (selectedEntry) open(selectedEntry);
 				break;
 			case 'Escape':
 			case 'Backspace':
 			case 'ArrowLeft':
-			case 'h':
 				e.preventDefault();
 				goUp();
 				break;
@@ -164,11 +160,11 @@
 	}
 
 	.left {
-		flex: 0.382;
+		flex: 0.29;
 	}
 
 	.right {
-		flex: 0.618;
+		flex: 0.71;
 	}
 
 	.divider {
