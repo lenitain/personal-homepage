@@ -182,7 +182,9 @@ let fileCount = $derived(countFiles(tree));
 - 窄边条：宽 `22px`，底色 `--bg1`（跟状态栏同色），`»` 居中偏上，hover 变 `--bg2`
 - `«` 按钮：树面板右上角，默认 `--grey1`，hover `--fg`
 - 缩进：`padding-left: 6px + depth * 20px`
-- 缩进参考线：一条 `1px` 的 `--bg4` 竖线，用 `background-image: linear-gradient(var(--bg4), var(--bg4))` + `background-size: 1px 100%` + `background-position: 26px 0` 画在树面板上（对照设计稿）
+- 缩进参考线：**画在每一行上，不画在面板上**。用 `repeating-linear-gradient(to right, var(--bg4) 0 1px, transparent 1px 20px)` 配合 `background-size: {depth × 20}px 100%`、`background-position: 26px 0`，每一层祖先各得一条 1px 竖线，只覆盖该行的高度。行内样式只写 `background-image`，所以 `.row` 和 `.row.cursor` 必须用 `background-color` 而不是 `background` 简写，否则会把参考线一并清掉
+
+  > 踩过的坑：最初把线画在 `.file-tree` 面板上（`background-size: 1px 100%`）。面板是全高的，于是树只有 300px 内容时，线照样从面板顶拉到面板底，在最后一行下面留一条 600 多像素的悬空竖线 —— 看起来像一条多余的侧栏边界。参考线必须跟着行高走。
 - 三角：`▾` 展开 / `▸` 收起，`--grey1`，固定宽 `1.1em`；文件行留同宽占位以对齐
 - 目录名 `--green` 加粗；文件名 `--fg`
 - **光标行**底色 `--bg3`；**已打开的文件**文件名 `--orange`（两者可叠加）
@@ -218,6 +220,7 @@ let fileCount = $derived(countFiles(tree));
 - [ ] 窗口缩到 344px：进场直接读到文章，左栏只剩一条窄边条
 - [ ] 344px 下点 `»`：树盖在文章上（文章保持满宽，不是被挤窄）
 - [ ] 344px 下点一篇文章：浮层自动收起，文章可读
+- [ ] 全部折叠时树里**没有**任何竖线；展开目录后，竖线只出现在缩进子项旁边，最后一行之后干干净净
 
 ## 风险
 

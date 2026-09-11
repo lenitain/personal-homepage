@@ -22,8 +22,33 @@
 		rowElements[index]?.scrollIntoView({ block: 'nearest' });
 	});
 
-	function indent(depth: number): string {
-		return `${6 + depth * 20}px`;
+	/** 每一层缩进多少像素。 */
+	const INDENT_STEP = 20;
+	/** 第一层的左内边距。 */
+	const INDENT_BASE = 6;
+	/** 缩进参考线画在第一层子项的起始位置。 */
+	const FIRST_GUIDE_X = INDENT_BASE + INDENT_STEP;
+
+	/**
+	 * 一个树行的行内样式：缩进，加上只覆盖这一行高度的缩进参考线。
+	 *
+	 * 参考线必须画在每一行上，不能画在 .file-tree 面板上 —— 面板是全高的，
+	 * 画上去会从面板顶一直拉到面板底，在最后一行下面留一条几百像素的悬空竖线。
+	 * 画在行上，连续几行自然拼成一条通到底的线，最后一行之后就干净地断掉。
+	 */
+	function rowStyle(depth: number): string {
+		const paddingLeft = `${INDENT_BASE + depth * INDENT_STEP}px`;
+		if (depth === 0) return `padding-left: ${paddingLeft}`;
+
+		// 每一层祖先各一条 1px 竖线：用固定周期的重复渐变，再用 background-size
+		// 把它裁到「depth 条线」的宽度，于是深层缩进也能自动对齐。
+		return [
+			`padding-left: ${paddingLeft}`,
+			`background-image: repeating-linear-gradient(to right, var(--bg4) 0 1px, transparent 1px ${INDENT_STEP}px)`,
+			`background-size: ${depth * INDENT_STEP}px 100%`,
+			`background-position: ${FIRST_GUIDE_X}px 0`,
+			'background-repeat: no-repeat'
+		].join('; ');
 	}
 </script>
 
@@ -39,7 +64,7 @@
 			aria-level={row.depth + 1}
 			aria-selected={row.entry.path === cursorPath}
 			aria-expanded={row.entry.type === 'dir' ? row.expanded : undefined}
-			style="padding-left: {indent(row.depth)}"
+			style={rowStyle(row.depth)}
 			bind:this={rowElements[i]}
 			onclick={() => onActivate?.(row.entry)}
 		>
@@ -55,11 +80,6 @@
 		overflow-y: auto;
 		overflow-x: hidden;
 		background: var(--bg0);
-		/* 缩进参考线：和设计稿一致，画在第一层缩进的起点上 */
-		background-image: linear-gradient(var(--bg4), var(--bg4));
-		background-size: 1px 100%;
-		background-repeat: no-repeat;
-		background-position: 26px 0;
 	}
 
 	.row {
@@ -68,7 +88,9 @@
 		width: 100%;
 		padding-right: 6px;
 		border: none;
-		background: none;
+		/* 只用 background-color：写成 background 简写会把行内样式里的
+		   缩进参考线（background-image）一并清掉 */
+		background-color: transparent;
 		color: var(--fg);
 		font: inherit;
 		font-size: 0.95em;
@@ -79,7 +101,7 @@
 	}
 
 	.row.cursor {
-		background: var(--bg3);
+		background-color: var(--bg3);
 	}
 
 	.row.opened .name {
