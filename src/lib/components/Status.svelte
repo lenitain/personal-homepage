@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { FsEntry } from '$lib/types';
 
-	let { entry, fileCount }: { entry: FsEntry | null; fileCount: number } = $props();
+	let { entry }: { entry: FsEntry | null } = $props();
 
 	let documentPath = $derived(entry ? `~/content/${entry.path}` : '~/content');
 
@@ -47,7 +47,6 @@
 		<span class="perms">--------</span>
 		<span class="size">-</span>
 	{/if}
-	<span class="count">{fileCount} files</span>
 </footer>
 
 <style>
@@ -90,12 +89,6 @@
 
 	.mtime {
 		color: var(--blue);
-		flex-shrink: 0;
-	}
-
-	.count {
-		margin-left: auto;
-		color: var(--grey0);
 		flex-shrink: 0;
 	}
 </style>

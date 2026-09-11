@@ -6,7 +6,7 @@
 	import FileTree from '$lib/components/FileTree.svelte';
 	import ContentPane from '$lib/components/ContentPane.svelte';
 	import Status from '$lib/components/Status.svelte';
-	import { countFileTreeFiles, findFileTreeEntry, flattenFileTree } from '$lib/file-tree';
+	import { findFileTreeEntry, flattenFileTree } from '$lib/file-tree';
 	import type { FsEntry } from '$lib/types';
 
 	let { data } = $props();
@@ -45,7 +45,6 @@
 
 	let rows = $derived(flattenFileTree(tree, expandedPaths));
 	let openEntry = $derived(openPath ? findFileTreeEntry(tree, openPath) : null);
-	let fileCount = $derived(countFileTreeFiles(tree));
 
 	// Randomize seeds once per page load (refresh = new board)
 	let wobbleSeed = $state(Math.floor(Math.random() * 10000));
@@ -176,7 +175,7 @@
 		</div>
 	</main>
 
-	<Status entry={openEntry} {fileCount} />
+	<Status entry={openEntry} />
 </div>
 
 <style>

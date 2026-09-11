@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { countFileTreeFiles, findFileTreeEntry, flattenFileTree } from './file-tree';
+import { findFileTreeEntry, flattenFileTree } from './file-tree';
 import type { FsEntry } from './types';
 
 function markdownFile(name: string, path: string): FsEntry {
@@ -85,15 +85,5 @@ describe('findFileTreeEntry', () => {
 	test('路径不存在时返回 null', () => {
 		expect(findFileTreeEntry(sampleTree(), 'blog/missing.md')).toBeNull();
 		expect(findFileTreeEntry(sampleTree(), 'blog/why-yazi.md/nested')).toBeNull();
-	});
-});
-
-describe('countFileTreeFiles', () => {
-	test('只数文章，不数目录', () => {
-		expect(countFileTreeFiles(sampleTree())).toBe(4);
-	});
-
-	test('空树是 0', () => {
-		expect(countFileTreeFiles(directory('~', '', []))).toBe(0);
 	});
 });

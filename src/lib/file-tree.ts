@@ -39,13 +39,3 @@ export function findFileTreeEntry(root: FsEntry, path: string): FsEntry | null {
 
 	return null;
 }
-
-/** 数出树里一共有多少篇文章。只数文件，目录不计入。 */
-export function countFileTreeFiles(root: FsEntry): number {
-	if (root.type === 'file') return 1;
-
-	return (root.children ?? []).reduce(
-		(total, child) => total + countFileTreeFiles(child),
-		0
-	);
-}

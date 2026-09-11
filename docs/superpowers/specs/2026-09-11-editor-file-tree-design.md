@@ -156,13 +156,13 @@ let fileCount = $derived(countFiles(tree));
 
 | 文件 | 动作 |
 | --- | --- |
-| `src/lib/tree.ts` | 新增。三个纯函数 |
+| `src/lib/file-tree.ts` | 新增。起初三个纯函数，`countFileTreeFiles` 随右下角文件数一起删掉了 |
 | `src/lib/tree.test.ts` | 新增。vitest 单测 |
 | `src/lib/components/FileTree.svelte` | 新增。吃 `rows` / `cursorPath` / `openPath`，吐事件 |
 | `src/lib/components/FileList.svelte` | **删除**（被 FileTree 取代） |
 | `src/lib/components/Header.svelte` | **删除** |
 | `src/lib/components/ContentPane.svelte` | 改。删掉「目录就渲染文件列表」那段 yazi 的 Miller 行为，只剩 markdown 预览 + 空状态 |
-| `src/lib/components/Status.svelte` | 改。左端加当前文章路径；右端改成全站文件总数；去掉 `parentCount` |
+| `src/lib/components/Status.svelte` | 改。左端加当前文章路径，去掉 `parentCount`；右下角那个「N files」后来也按要求删了 |
 | `src/routes/+page.svelte` | 重写。新状态模型 + 新键盘处理 + 左栏开合 |
 | `src/routes/+page.server.ts` | 改。见上 |
 | `content/readme.md` | 改。键位表换成 ↑/↓ + Enter，措辞从 "file browser on the left" 改成树 |
@@ -203,7 +203,7 @@ let fileCount = $derived(countFiles(tree));
 ## 验证
 
 1. `npm run check`（svelte-check）零错误
-2. `npm run test`（`tree.ts` 的三个纯函数）
+2. `npm run test`（`file-tree.ts` / `content-tree.ts` 的纯函数）
 3. 起 dev server 手点一遍：
 
 - [ ] 首屏：树全折叠（5 个目录 + `readme.md`），`readme.md` 显示为橙色，右栏是 readme 内容
@@ -217,7 +217,7 @@ let fileCount = $derived(countFiles(tree));
 - [ ] 开合有 160ms 过渡（不是瞬移）；动画期间量宽度能采到中间值
 - [ ] 开合过程中分割线跟着正文左边缘走，任何时刻都只有一条竖线
 - [ ] 左栏收起时按 ↑/↓/Enter → 无任何反应
-- [ ] 状态栏：左边是当前文章路径，右边是文件总数
+- [ ] 状态栏：左边是当前文章路径；右端没有任何统计数字
 - [ ] 展开很深的目录后用键盘一路 ↓，行会被滚进可视区
 - [ ] 换文章后右栏回到顶部
 - [ ] 塞一个超长文件名，左栏不被撑破
