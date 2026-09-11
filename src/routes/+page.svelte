@@ -30,6 +30,9 @@
 	 */
 	let narrowViewport = $state(false);
 
+	/** 窄边条的提示文字，跟着开合状态走。 */
+	let sidebarToggleLabel = $derived(sidebarOpen ? '收起文件树' : '展开文件树');
+
 	let rows = $derived(flattenFileTree(tree, expandedPaths));
 	let openEntry = $derived(openPath ? findFileTreeEntry(tree, openPath) : null);
 	let fileCount = $derived(countFileTreeFiles(tree));
@@ -38,6 +41,10 @@
 	let wobbleSeed = $state(Math.floor(Math.random() * 10000));
 	let chalkSeed = $state(Math.floor(Math.random() * 10000));
 	let boardSeed = $state(Math.floor(Math.random() * 10000));
+
+	function toggleSidebar() {
+		sidebarOpen = !sidebarOpen;
+	}
 
 	function toggleDirectory(entry: FsEntry) {
 		if (!expandedPaths.has(entry.path)) {
@@ -128,27 +135,23 @@
 
 <div class="chalk-app">
 	<main>
+		<!--
+			最左侧这条常驻的窄边条本身就是文件树的开关：展开时它显示 « 点了收起，
+			收起时显示 » 点了展开。位置永远不动，不收起来、也不换成别的按钮。
+		-->
+		<button
+			type="button"
+			class="rail"
+			title={sidebarToggleLabel}
+			aria-label={sidebarToggleLabel}
+			aria-expanded={sidebarOpen}
+			onclick={toggleSidebar}>{sidebarOpen ? '«' : '»'}</button
+		>
+
 		{#if sidebarOpen}
 			<aside class="sidebar">
-				<div class="sidebar-tools">
-					<button
-						type="button"
-						class="collapse"
-						title="收起文件树"
-						aria-label="收起文件树"
-						onclick={() => (sidebarOpen = false)}>«</button
-					>
-				</div>
 				<FileTree {rows} {cursorPath} {openPath} onActivate={activateEntry} />
 			</aside>
-		{:else}
-			<button
-				type="button"
-				class="rail"
-				title="展开文件树"
-				aria-label="展开文件树"
-				onclick={() => (sidebarOpen = true)}>»</button
-			>
 		{/if}
 
 		<div class="pane">
@@ -200,6 +203,8 @@
 		flex: 1;
 		overflow: hidden;
 		position: relative;
+		/* 窄边条的宽度。窄视口下浮层要靠它避让，所以两处共用同一个值。 */
+		--rail-width: 22px;
 	}
 
 	.sidebar {
@@ -211,39 +216,14 @@
 		overflow: hidden;
 	}
 
-	.sidebar-tools {
-		display: flex;
-		justify-content: flex-end;
-		align-items: center;
-		height: 18px;
-		padding-right: 4px;
-		flex-shrink: 0;
-	}
-
-	.collapse {
-		border: none;
-		background: none;
-		color: var(--grey1);
-		font: inherit;
-		font-size: 0.85em;
-		line-height: 1;
-		padding: 1px 5px;
-		border-radius: 3px;
-		cursor: pointer;
-	}
-
-	.collapse:hover {
-		color: var(--fg);
-		background: var(--bg2);
-	}
-
+	/* 常驻最左侧的开合开关。位置永远不动，只有字形跟着开合状态变。 */
 	.rail {
 		display: flex;
 		justify-content: center;
 		align-items: flex-start;
-		width: 22px;
+		width: var(--rail-width);
 		flex-shrink: 0;
-		padding-top: 2px;
+		padding-top: 3px;
 		border: none;
 		border-right: 1px solid var(--bg4);
 		background: var(--bg1);
@@ -271,6 +251,7 @@
 	/*
 	 * 窄视口（断点必须和脚本里的 NARROW_VIEWPORT_QUERY 一致）：
 	 * 并排放不下两栏，于是树改成盖在正文上的浮层，宽度也跟着视口收缩。
+	 * 左边缘要让开窄边条 —— 不然浮层会盖住开关，收不起来。
 	 * 默认收起的状态由脚本设置。
 	 */
 	@media (max-width: 640px) {
@@ -278,9 +259,9 @@
 			position: absolute;
 			top: 0;
 			bottom: 0;
-			left: 0;
+			left: var(--rail-width);
 			z-index: 10;
-			width: min(280px, 85vw);
+			width: min(280px, calc(100vw - var(--rail-width) - 24px));
 			background: var(--bg0);
 			box-shadow: 2px 0 14px rgb(0 0 0 / 0.45);
 		}
