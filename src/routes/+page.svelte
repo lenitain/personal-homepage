@@ -10,6 +10,9 @@
 
 	let { data } = $props();
 
+	/** 必须和样式表里那条 @media 断点保持一致。 */
+	const NARROW_VIEWPORT_QUERY = '(max-width: 640px)';
+
 	const tree = $derived(data.tree);
 
 	/** 展开了哪些目录。空集合 = 全部折叠，这就是首屏的样子。 */
@@ -21,6 +24,11 @@
 	let openPath = $derived(chosenPath ?? data.initialPath);
 	/** 左侧整栏是否展开。 */
 	let sidebarOpen = $state(true);
+	/**
+	 * 视口是否窄到放不下并排两栏。窄的时候左栏变成盖在正文上的浮层，并且默认收起 ——
+	 * 否则 280px 的树会把正文挤成一条几十像素的缝，整页没法读。
+	 */
+	let narrowViewport = $state(false);
 
 	let rows = $derived(flattenFileTree(tree, expandedPaths));
 	let openEntry = $derived(openPath ? findFileTreeEntry(tree, openPath) : null);
@@ -51,6 +59,8 @@
 			toggleDirectory(entry);
 		} else {
 			chosenPath = entry.path;
+			// 窄屏下树是浮层：选完文章就收起来，不然文章还被盖着
+			if (narrowViewport) sidebarOpen = false;
 		}
 	}
 
@@ -96,8 +106,21 @@
 	}
 
 	onMount(() => {
+		const narrow = window.matchMedia(NARROW_VIEWPORT_QUERY);
+		narrowViewport = narrow.matches;
+		if (narrowViewport) sidebarOpen = false;
+
+		const handleViewportChange = (event: MediaQueryListEvent) => {
+			narrowViewport = event.matches;
+		};
+
+		narrow.addEventListener('change', handleViewportChange);
 		document.addEventListener('keydown', handleKeydown);
-		return () => document.removeEventListener('keydown', handleKeydown);
+
+		return () => {
+			narrow.removeEventListener('change', handleViewportChange);
+			document.removeEventListener('keydown', handleKeydown);
+		};
 	});
 </script>
 
@@ -176,6 +199,7 @@
 		display: flex;
 		flex: 1;
 		overflow: hidden;
+		position: relative;
 	}
 
 	.sidebar {
@@ -242,5 +266,23 @@
 		/* 不加这条，长代码块会把右栏撑破 */
 		min-width: 0;
 		overflow: hidden;
+	}
+
+	/*
+	 * 窄视口（断点必须和脚本里的 NARROW_VIEWPORT_QUERY 一致）：
+	 * 并排放不下两栏，于是树改成盖在正文上的浮层，宽度也跟着视口收缩。
+	 * 默认收起的状态由脚本设置。
+	 */
+	@media (max-width: 640px) {
+		.sidebar {
+			position: absolute;
+			top: 0;
+			bottom: 0;
+			left: 0;
+			z-index: 10;
+			width: min(280px, 85vw);
+			background: var(--bg0);
+			box-shadow: 2px 0 14px rgb(0 0 0 / 0.45);
+		}
 	}
 </style>
