@@ -8,6 +8,9 @@ node_modules
 /.svelte-kit
 /build
 
+# Brainstorming visual companion sessions
+.superpowers/
+
 # OS
 .DS_Store
 Thumbs.db
