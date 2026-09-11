@@ -1,16 +1,17 @@
 # lenitain's homepage
 
-Welcome. Navigate with your keyboard:
+Welcome. The tree on the left is the whole site; pick an article and it shows up on the right.
 
-| Key              | Action           |
-| ---------------- | ---------------- |
-| `↓`              | Move down        |
-| `↑`              | Move up          |
-| `Enter` / `→`    | Open dir         |
-| `Esc` / `←`      | Go to parent dir |
+| Key       | Action                        |
+| --------- | ----------------------------- |
+| `↓`       | Move the highlight down       |
+| `↑`       | Move the highlight up         |
+| `Enter`   | Open a folder / an article    |
 
-Use the file browser on the left to explore.
-Content appears on the right.
+The arrow keys only move the highlight — press `Enter` to actually open something.
+The mouse works the same way: click a folder to fold it open, click an article to read it.
+
+The `«` at the top of the tree folds the whole sidebar away; `»` brings it back.
 
 _Built with SvelteKit, styled with Everforest._
 _Chalk-on-blackboard effect powered by SVG filters._

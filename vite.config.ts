@@ -1,6 +1,6 @@
 import adapter from '@sveltejs/adapter-auto';
 import { sveltekit } from '@sveltejs/kit/vite';
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
 	plugins: [
@@ -16,5 +16,10 @@ export default defineConfig({
 			// See https://svelte.dev/docs/kit/adapters for more information about adapters.
 			adapter: adapter()
 		})
-	]
+	],
+
+	// 只跑 src/ 下的纯逻辑单测（tree 的拍平、content/ 的读取），组件靠手点验证。
+	test: {
+		include: ['src/**/*.test.ts']
+	}
 });

@@ -1,46 +1,23 @@
-import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { PageServerLoad } from './$types';
-import type { FsEntry } from '$lib/types';
+import { readContentTree } from '$lib/content-tree';
 
 const CONTENT_DIR = join(process.cwd(), 'content');
 
-async function readDir(dirPath: string): Promise<FsEntry[]> {
-	const entries = await readdir(dirPath, { withFileTypes: true });
-	const result: FsEntry[] = [];
-
-	for (const entry of entries) {
-		const fullPath = join(dirPath, entry.name);
-		if (entry.isDirectory()) {
-			result.push({
-				name: entry.name,
-				type: 'dir',
-				children: await readDir(fullPath)
-			});
-		} else if (entry.name.endsWith('.md')) {
-			const content = await readFile(fullPath, 'utf-8');
-			const { mtime } = await stat(fullPath);
-			result.push({
-				name: entry.name,
-				type: 'file',
-				content,
-				mtime: mtime.toISOString()
-			});
-		}
-	}
-
-	return result;
-}
+/** 首屏默认打开的那篇。找不到就留空，让右侧显示空状态。 */
+const DEFAULT_DOCUMENT = 'readme.md';
 
 export const load: PageServerLoad = async () => {
-	const tree = await readDir(CONTENT_DIR);
-	const readmeIndex = tree.findIndex((e) => e.name === 'readme.md');
+	const children = await readContentTree(CONTENT_DIR);
+	const hasDefaultDocument = children.some((entry) => entry.path === DEFAULT_DOCUMENT);
+
 	return {
 		tree: {
+			path: '',
 			name: '~',
 			type: 'dir' as const,
-			children: tree
+			children
 		},
-		initialIndex: readmeIndex >= 0 ? readmeIndex : 0
+		initialPath: hasDefaultDocument ? DEFAULT_DOCUMENT : null
 	};
 };

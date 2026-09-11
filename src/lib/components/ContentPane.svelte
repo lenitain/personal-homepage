@@ -1,22 +1,17 @@
 <script lang="ts">
 	import { marked } from 'marked';
 	import type { FsEntry } from '$lib/types';
-	import FileList from './FileList.svelte';
 
 	let { entry }: { entry: FsEntry | null } = $props();
 
 	let html = $derived(
-		entry?.content ? (marked.parse(entry.content) as string) : ''
+		entry?.type === 'file' && entry.content ? (marked.parse(entry.content) as string) : ''
 	);
 </script>
 
 <div class="content-pane">
-	{#if entry?.type === 'dir' && entry.children?.length}
-		<FileList entries={entry.children} />
-	{:else if entry?.type === 'file' && html}
+	{#if html}
 		<article>{@html html}</article>
-	{:else if entry?.type === 'dir'}
-		<div class="empty">empty directory</div>
 	{:else}
 		<div class="empty">select a file to preview</div>
 	{/if}

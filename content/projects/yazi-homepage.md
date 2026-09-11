@@ -1,6 +1,6 @@
 # yazi-homepage
 
-A personal homepage styled after the **yazi** file manager.
+A personal homepage laid out like a code editor: a file tree on the left, the article on the right.
 
 ## Stack
 
@@ -11,7 +11,7 @@ A personal homepage styled after the **yazi** file manager.
 
 ## Features
 
-- Three-column yazi layout (parent / current / preview)
-- Keyboard-driven navigation (↑ / ↓ / ← → / Enter / Esc)
+- Collapsible file tree over the real `content/` directory — every page you can read is a `.md` file in there
+- Editor-style cursor: arrow keys move the highlight, `Enter` or a click opens
 - Markdown rendering with chalk-on-blackboard aesthetic
-- Responsive terminal feel
+- Sidebar folds away to a 22px rail, and remembers which folders you had open
