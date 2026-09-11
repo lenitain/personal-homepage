@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { slide } from 'svelte/transition';
 	import { SvelteSet } from 'svelte/reactivity';
 	import ChalkFilter from '$lib/components/ChalkFilter.svelte';
 	import FileTree from '$lib/components/FileTree.svelte';
@@ -12,6 +13,15 @@
 
 	/** 必须和样式表里那条 @media 断点保持一致。 */
 	const NARROW_VIEWPORT_QUERY = '(max-width: 640px)';
+
+	/** 左栏开合动画时长。短一点：这是个导航动作，不该让人等它演完。 */
+	const SIDEBAR_SLIDE_MS = 160;
+
+	/** 系统开了「减少动态效果」就把时长归零。SSR 阶段没有 window，先按正常时长走。 */
+	function sidebarSlideDuration(): number {
+		if (typeof window === 'undefined') return SIDEBAR_SLIDE_MS;
+		return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : SIDEBAR_SLIDE_MS;
+	}
 
 	const tree = $derived(data.tree);
 
@@ -149,8 +159,13 @@
 		>
 
 		{#if sidebarOpen}
-			<aside class="sidebar">
-				<FileTree {rows} {cursorPath} {openPath} onActivate={activateEntry} />
+			<aside
+				class="sidebar"
+				transition:slide={{ axis: 'x', duration: sidebarSlideDuration() }}
+			>
+				<div class="sidebar-inner">
+					<FileTree {rows} {cursorPath} {openPath} onActivate={activateEntry} />
+				</div>
 			</aside>
 		{/if}
 
@@ -212,11 +227,24 @@
 		flex-direction: column;
 		width: 280px;
 		flex-shrink: 0;
-		border-right: 1px solid var(--bg4);
 		overflow: hidden;
 	}
 
-	/* 常驻最左侧的开合开关。位置永远不动，只有字形跟着开合状态变。 */
+	/*
+	 * 定宽内层。开合动画改的是外层的宽度，内层不动 —— 于是动画看起来是
+	 * 「从窄边条那里展开 / 卷回去」，而不是把树里的文件名一路挤扁。
+	 */
+	.sidebar-inner {
+		display: flex;
+		flex-direction: column;
+		flex: 1;
+		width: 280px;
+		min-height: 0;
+	}
+
+	/* 常驻最左侧的开合开关。位置永远不动，只有字形跟着开合状态变。
+	   它不画右边框：分割线统一交给 .pane 的 border-left，这样任何状态下
+	   都只有一条线，而且永远贴在正文左边缘、跟着开合动画一起走。 */
 	.rail {
 		display: flex;
 		justify-content: center;
@@ -225,7 +253,6 @@
 		flex-shrink: 0;
 		padding-top: 3px;
 		border: none;
-		border-right: 1px solid var(--bg4);
 		background: var(--bg1);
 		color: var(--grey1);
 		font: inherit;
@@ -246,6 +273,8 @@
 		/* 不加这条，长代码块会把右栏撑破 */
 		min-width: 0;
 		overflow: hidden;
+		/* 唯一的竖分割线：贴着正文左边缘，开合动画期间跟着一起移动 */
+		border-left: 1px solid var(--bg4);
 	}
 
 	/*
