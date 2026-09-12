@@ -15,9 +15,12 @@
 			const count = entry.children?.length ?? 0;
 			return `${count} item${count !== 1 ? 's' : ''}`;
 		}
-		const bytes = entry.content?.length ?? 0;
+		// 用 stat 报的真实字节数。以前拿 content.length 当字节数：对 markdown 是字符数，
+		// 对二进制（pdf）根本是错的
+		const bytes = entry.size ?? 0;
 		if (bytes < 1024) return `${bytes}B`;
-		return `${(bytes / 1024).toFixed(1)}K`;
+		if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}K`;
+		return `${(bytes / (1024 * 1024)).toFixed(1)}M`;
 	}
 
 	function formatMtime(mtime?: string): string {

@@ -25,6 +25,13 @@
 
 	const tree = $derived(data.tree);
 
+	/** 焦点是否落在输入控件里 —— 全局键盘快捷键要给输入让路。 */
+	function isTextEntryTarget(target: EventTarget | null): boolean {
+		if (!(target instanceof HTMLElement)) return false;
+		if (target.isContentEditable) return true;
+		return ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+	}
+
 	/** 展开了哪些目录。空集合 = 全部折叠，这就是首屏的样子。 */
 	const expandedPaths = new SvelteSet<string>();
 	/** 光标：键盘现在停在哪一行。跟右栏显示哪一篇是两件事。 */
@@ -104,6 +111,10 @@
 	function handleKeydown(event: KeyboardEvent) {
 		// 树收起来的时候不给键盘操作，免得看不见的光标在动
 		if (!sidebarOpen) return;
+
+		// 焦点在输入控件里时一律让路：否则在文档搜索框里打字会把文件树的光标挪走、
+		// Enter 还会顺手打开一篇文件
+		if (isTextEntryTarget(event.target)) return;
 
 		switch (event.key) {
 			case 'ArrowDown':
@@ -205,10 +216,12 @@
 		z-index: 9999;
 	}
 
-	/* Chalk writing: character wobble + grain breakup */
+	/* Chalk writing: character wobble + grain breakup.
+	   只套在真正是「文字」的渲染区上：树、状态栏，以及自己套滤镜的正文
+	   （markdown 的 article 在 ContentPane、文档 canvas 在 DocumentViewer）。
+	   这里不再套 .content-pane —— 文档视图会滚动多页，整栏套滤镜每帧都要重栅格化。 */
 	.chalk-app :global(.file-tree),
-	.chalk-app :global(footer),
-	.chalk-app :global(.content-pane) {
+	.chalk-app :global(footer) {
 		filter: url(#chalk-writing);
 	}
 

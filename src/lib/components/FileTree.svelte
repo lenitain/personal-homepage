@@ -14,7 +14,7 @@
 	} = $props();
 
 	// 键盘移动光标时，把跑到可视区外面的那一行拉回来。
-	let rowElements: (HTMLElement | undefined)[] = [];
+	let rowElements = $state<(HTMLElement | undefined)[]>([]);
 
 	$effect(() => {
 		const index = rows.findIndex((row) => row.entry.path === cursorPath);

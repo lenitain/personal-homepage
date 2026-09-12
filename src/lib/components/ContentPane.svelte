@@ -1,21 +1,36 @@
 <script lang="ts">
 	import { marked } from 'marked';
+	import DocumentViewer from './DocumentViewer.svelte';
+	import { previewKindOf } from '$lib/preview-kind';
 	import type { FsEntry } from '$lib/types';
 
 	let { entry }: { entry: FsEntry | null } = $props();
 
+	let kind = $derived(entry ? previewKindOf(entry.name) : null);
 	let html = $derived(
-		entry?.type === 'file' && entry.content ? (marked.parse(entry.content) as string) : ''
+		kind === 'markdown' && entry?.content ? (marked.parse(entry.content) as string) : ''
 	);
+
+	/** 每段单独编码：文件名里可能有空格或 `#`，整串 encodeURI 处理不了它们。 */
+	function documentUrl(prefix: string, path: string): string {
+		const encoded = path.split('/').map(encodeURIComponent).join('/');
+		return `${prefix}/${encoded}`;
+	}
 </script>
 
-<div class="content-pane">
-	{#if html}
-		<article>{@html html}</article>
-	{:else}
-		<div class="empty">select a file to preview</div>
-	{/if}
-</div>
+{#if entry && kind === 'typst'}
+	<DocumentViewer url={documentUrl('/typst', entry.path)} tone="chalk" title={entry.name} />
+{:else if entry && kind === 'pdf'}
+	<DocumentViewer url={documentUrl('/raw', entry.path)} tone="invert" title={entry.name} />
+{:else}
+	<div class="content-pane">
+		{#if html}
+			<article>{@html html}</article>
+		{:else}
+			<div class="empty">select a file to preview</div>
+		{/if}
+	</div>
+{/if}
 
 <style>
 	.content-pane {
@@ -28,6 +43,15 @@
 	.empty {
 		color: var(--grey1);
 		padding: 0.6em;
+	}
+
+	/*
+	 * 粉笔抖动只套在 markdown 正文上。原先套在 .content-pane 整栏（见 +page.svelte），
+	 * 文档视图进来后会拖垮多页滚动，所以按内容类型各自套：正文在这里，
+	 * pdf / typst 的 canvas 在 DocumentViewer 里按页套。
+	 */
+	article {
+		filter: url(#chalk-writing);
 	}
 
 	/* Markdown content styling */

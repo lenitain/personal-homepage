@@ -1,8 +1,6 @@
-import { join } from 'node:path';
 import type { PageServerLoad } from './$types';
+import { CONTENT_DIR } from '$lib/content-dir.server';
 import { readContentTree } from '$lib/content-tree';
-
-const CONTENT_DIR = join(process.cwd(), 'content');
 
 /** 首屏默认打开的那篇。找不到就留空，让右侧显示空状态。 */
 const DEFAULT_DOCUMENT = 'readme.md';
