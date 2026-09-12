@@ -15,9 +15,10 @@
 
 1. 三类文件可预览：`.md` / `.typ` / `.pdf`
 2. `.typ` 显示**编译后的排版结果**，不是源码
-3. 两类排版文档的文字**可选中**（原话：「typst 不可选中完全不可接受」）
-4. **移动端可用**（原话：「移动端渲染不了 pdf 吗，肯定有方法的」）
-5. 两类排版文档统一到黑板的粉笔风格，且**不做风格开关，永远开着**
+3. 两类排版文档的文字**可选中**
+4. 两类排版文档的文字**可检索，而且要两种方式**：浏览器自带的字符检索（Ctrl+F）与站内搜索栏
+5. **移动端可用**
+6. 两类排版文档统一到黑板的粉笔风格，且**不做风格开关，永远开着**
 
 ## 已敲定的决策
 
@@ -25,22 +26,26 @@
 | --- | --- | --- |
 | 1 | typst 预览的含义 | 编译后的排版结果 |
 | 2 | 载体收敛 | 全站只有两种载体：**Markdown** 与 **PDF**。typst 编译成 PDF 后与 pdf 走同一条渲染路径 |
-| 3 | 为什么不用 SVG | `--format svg` 的字是**字形轮廓**，实测整页 0 个 `<text>` 元素，文字不可选中（详见「实测记录」A） |
-| 4 | 为什么不用 typst 的 HTML 导出 | 实测 `#grid` / `#place` / `#rect` 被**静默丢弃**且 exit 0，用 `#grid` 排两栏的真实 CV 会渲染成空白（详见「实测记录」B） |
-| 5 | 为什么不用原生 iframe 嵌 PDF | 移动端不可用：Android 触发下载、iOS 只渲染第一页（详见「实测记录」C） |
-| 6 | 渲染器 | **pdf.js**（`pdfjs-dist`）。它的文字层是官方一等 API，选中/搜索对 typst 与 pdf 一视同仁 |
-| 7 | 两类文档的风格 | typst：**编译期**注入主题（页底、正文、链接、代码色）；现成 pdf：**canvas 上的 CSS filter** 整页处理。两者都常开，**不做开关** |
-| 8 | 树的收录范围 | 只收 `.md` / `.typ` / `.pdf`；**点号开头的文件与目录一律跳过** |
-| 9 | 站内搜索框 | **不做**。文字层保证可选中；原生 viewer 那个搜索 UI 随之失去，这一条明确接受 |
-| 10 | 缩放控件 | **不做**缩放按钮。默认 fit-width 随容器自适应，要放大用浏览器自身的缩放/捏合 |
+| 3 | 为什么不用 SVG | `--format svg` 的字是**字形轮廓**，实测整页 0 个 `<text>` 元素，文字不可选中（见「实测记录」A） |
+| 4 | 为什么不用 typst 的 HTML 导出 | 实测 `#grid` / `#place` / `#rect` 被**静默丢弃**且 exit 0，用 `#grid` 排两栏的真实 CV 会渲染成空白（见「实测记录」B） |
+| 5 | 为什么不用原生 iframe 嵌 PDF | 移动端不可用：Android 触发下载、iOS 只渲染第一页（见「实测记录」D） |
+| 6 | 渲染器 | **pdf.js 的 viewer 层**（`pdfjs-dist/web/pdf_viewer.mjs`），不是只用它的渲染 API。理由：搜索、缩放、翻页、fit-width、可见区懒渲染都在这一层里现成（见「实测记录」E） |
+| 7 | 两种检索都要 | **搜索栏**用 pdf.js 的 `PDFFindController`，抽文字、覆盖全部页；**浏览器 Ctrl+F 不拦截**，命中已渲染页。两者覆盖面不同，是分工不是重复（见「实测记录」F） |
+| 8 | 两类文档的风格 | typst：**编译期**注入主题（页底、正文、链接、代码色）；现成 pdf：**canvas 上的 CSS filter** 整页处理。两者都常开，**不做开关** |
+| 9 | 树的收录范围 | 只收 `.md` / `.typ` / `.pdf`；**点号开头的文件与目录一律跳过** |
+| 10 | 缩放 / 翻页 / 页码 | **做**。viewer 层白拿，不自己写 |
+| 11 | cMaps 与标准字体 | **自托管**：把 `pdfjs-dist/cmaps` 与 `pdfjs-dist/standard_fonts` 拷进 `static/pdfjs/`。不配这两项，非嵌入标准字体与非嵌入 CJK 字体的 PDF 会缺字（见「风险」） |
+| 12 | 全站搜索（跨文件检索） | **不做**。这是另一个功能（要索引、结果列表、与「只靠文件树导航」的模型对接），该有自己的 spec —— 不是被这次含糊掉的 |
+
+> 决策 7 与 12 是上一版 spec 的一处错误修正。上一版用「站内搜索框」一个词同时指着「文档内查找」和「全站搜索」，然后把两者一起否掉了：前者是 viewer 能力、成本很低，后者才是另一个功能。措辞含糊导致决定含糊。
 
 ## 不做什么
 
 - 图片 / txt / 其他类型的预览（树里也不显示）
 - typst 源码视图（决策 1 已排除）
-- 站内搜索框（决策 9）
-- **PDF 的逐对象风格化** —— 做不到：PDF 里公式、图片、色块、表格边框是矢量路径或位图，没有可提取的排版对象；文字层只提供「文字片段 + 坐标」，没有「这是标题」这种语义。能做的是整页级处理（决策 7）
-- 自建 viewer 的工具栏（打印 / 下载 / 搜索 / 缩略图）
+- **全站搜索**（决策 12）—— 明确留作独立功能，不是遗漏
+- **PDF 的逐对象风格化** —— 做不到：PDF 里公式、图片、色块、表格边框是矢量路径或位图，没有可提取的排版对象；文字层只提供「文字片段 + 坐标」，没有「这是标题」这种语义。能做的是整页级处理（决策 8）
+- 打印 / 下载 / 缩略图侧栏等 viewer 全套功能
 
 ## 实测记录
 
@@ -84,19 +89,33 @@ typst compile --format pdf cv.typ cv.pdf && pdftotext cv.pdf -
 
 ### D. 移动端 iframe 的实测结论来源
 
-[How to Embed PDF in HTML](https://www.dynamsoft.com/codepool/how-to-embed-pdf-in-html.html) 的对比结论：`<iframe>` 在移动端 **Android 触发下载、iOS 只渲染第一页**，并建议用 JS viewer 换取一致的跨端行为。与 pdf.js 的定位一致。
+[How to Embed PDF in HTML](https://www.dynamsoft.com/codepool/how-to-embed-pdf-in-html.html) 的对比结论：`<iframe>` 在移动端 **Android 触发下载、iOS 只渲染第一页**，并建议用 JS viewer 换取一致的跨端行为。
 
-### E. pdfjs-dist 的可发货面
+### E. pdf.js 的 viewer 层确实发货，且自带我们要的东西
 
 `pdfjs-dist@6.3.289`，包内**没有** `exports` 映射，深路径导入合法：
 
 | 路径 | 体积 | 用途 |
 | --- | --- | --- |
-| `build/pdf.min.mjs` | 458 KB | 主入口，导出 `getDocument` / `TextLayer` / `AnnotationLayer` / `GlobalWorkerOptions` / `setLayerDimensions` |
+| `build/pdf.min.mjs` | 458 KB | 主入口，导出 `getDocument` / `TextLayer` / `AnnotationLayer` / `GlobalWorkerOptions` |
 | `build/pdf.worker.min.mjs` | 1.26 MB | worker，用 `?url` 导入后赋给 `GlobalWorkerOptions.workerSrc` |
-| `web/pdf_viewer.css` | 163 KB | `textLayer` / `annotationLayer` 的定位规则 |
+| `web/pdf_viewer.mjs` | 320 KB | viewer 层，实测导出 `PDFViewer` / `EventBus` / `PDFLinkService` / `PDFFindController` / `LinkTarget` |
+| `web/pdf_viewer.css` | 163 KB | textLayer / annotationLayer / highlight 的定位与样式 |
 
-主入口与 worker 合计约 1.7 MB，**动态 import 懒加载**：只看 markdown 的访客不付这笔钱，首次点开 typst/pdf 才下载。
+合计约 2.2 MB，**动态 import 懒加载**：只看 markdown 的访客不付这笔钱。
+
+接线方式有[官方风格的完整示例](https://www.nutrient.io/blog/pdfjs-react-viewer-setup/)：`EventBus` → `PDFLinkService` → `PDFFindController` → `PDFViewer`，再 `setDocument`。该文还有一条对我们直接相关的提示：**面板尺寸可变的场景要调 `viewer.update()`** —— 我们的侧栏开合就是 160ms 的宽度动画。
+
+### F. 两种检索的覆盖面不一样（决定「两个都要」）
+
+读 `web/pdf_viewer.mjs` 源码：
+
+- `DEFAULT_CACHE_SIZE = 10`，缓冲区按 `max(10, 2 × 可见页 + 1)` 调整（`#buffer.resize(newCacheSize, visible.ids)`）。**缓冲外的页会被销毁**，canvas 与文字层一起移除
+- ⇒ **浏览器 Ctrl+F 只能命中视口附近约 10 页内的文字**，再远就没有 DOM 文字可匹配
+- `PDFFindController` 走 `_extractText` / `getTextContent`，**从文档里抽文字，不依赖渲染**
+- ⇒ **搜索栏能命中全部页**，并驱动 viewer 把目标页渲染出来、滚过去、打高亮
+
+两者互补：Ctrl+F 是"眼前这页里找"，搜索栏是"整份文档里找"。缓冲区大小是写死的常量、没有公开选项暴露它 —— 所以 Ctrl+F 的覆盖面是 pdf.js 的既有行为，不是我们的选择。
 
 ## 数据模型
 
@@ -225,7 +244,7 @@ export function resolveContentPath(contentDir: string, urlPath: string): string 
 
 1. 空串、空段（`a//b`）、`.` 与 `..` 段
 2. 绝对路径（以 `/` 开头）、含 NUL 字节
-3. 扩展名不在 `.pdf` 白名单（该函数只服务 `/raw`；`/typst` 用另一份 `.typ` 白名单，同一实现参数化）
+3. 扩展名不在白名单（`/raw` 用 `.pdf`，`/typst` 用 `.typ`，同一实现参数化）
 4. `path.resolve` 之后**仍必须**以 `contentDir + path.sep` 为前缀 —— 这是最后一道闸
 
 **为什么抽成纯函数**：这是整个改动唯一的安全边界，必须能单测，不能只靠手点。
@@ -255,22 +274,68 @@ rest 参数 `[...path]` 必须是**最后一段**，所以 `[...path]/[page]` �
 
 props：`{ url: string, tone: 'chalk' | 'invert', title: string }`。
 
-流程：
+按 viewer 层的官方接线方式组装，四件套一个都不能少：
+
+```ts
+const pdfjs = await import('pdfjs-dist/web/pdf_viewer.mjs');   // 动态 import，SSR 阶段不碰
+const eventBus = new pdfjs.EventBus();
+const linkService = new pdfjs.PDFLinkService({ eventBus, externalLinkTarget: pdfjs.LinkTarget.BLANK });
+const findController = new pdfjs.PDFFindController({ linkService, eventBus });
+const viewer = new pdfjs.PDFViewer({ container, eventBus, linkService, findController });
+linkService.setViewer(viewer);
+// setDocument 三处都要接：linkService / findController / viewer
+```
+
+要点：
 
 1. `fetch(url)` → 不 ok 就按 content-type 解析 JSON 诊断，渲染报错面板（`.typ` 的编译错误走这里）；ok 就 `arrayBuffer()`
-2. 动态 `import('pdfjs-dist')`，把 `?url` 导入的 worker 赋给 `GlobalWorkerOptions.workerSrc`（**只能客户端做**，模块顶层不碰 pdf.js）
-3. `getDocument({ data })` → `numPages`
-4. 每页一个占位容器，`IntersectionObserver` 只渲染可见页（±1 页），避免长文档一次性铺开
-5. 每页渲染三层：`<canvas>` + 文字层容器（`class="textLayer"`）+ `AnnotationLayer`（让链接可点）
-6. 用 pdf.js 导出的 `setLayerDimensions()` 设置层尺寸 —— v4+ 处理 `--scale-factor` 与旋转的正确做法，手写会错位
+2. worker：`import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'` → `GlobalWorkerOptions.workerSrc = workerUrl`，**必须在加载文档前设好**
+3. `cMapUrl` / `standardFontDataUrl` 指向自托管的 `static/pdfjs/{cmaps,standard_fonts}/`（决策 11）
+4. `pagesinit` 事件里设 `viewer.currentScaleValue = 'page-width'`
+5. **卸载时 `loadingTask.destroy()` + `pdfDocument.destroy()`** —— 换文件会重新挂载，不销毁会漏 worker
+6. 侧栏开合结束后调 `viewer.update()`（官方提示的 resizable panel 处理）
+7. 可见区懒渲染是 viewer 层自带行为，**不自己写 IntersectionObserver**
 
-三态：**编译中 / 报错面板 / 页面列表**。页码指示（`3 / 8`）放 viewer 右下角一个轻量浮标，不做工具栏。
+三态：**加载中 / 报错面板 / 页面**。
 
-缩放：默认 fit-width，`ResizeObserver` 跟随容器宽度重算；**不提供缩放按钮**（决策 10）。
+### `src/lib/components/DocumentToolbar.svelte`（新增）
 
-**文字层 CSS 直接 `import 'pdfjs-dist/web/pdf_viewer.css'`**，不自己抄：文字层的定位规则随版本变过（`--scale-factor`、`transform`、`setLayerDimensions` 配套），抄一份迟早对不上；该文件大部分规则挂在 `.pdfViewer` 类下不会外溢到站点，且它随文档 chunk 懒加载。
+一条细长的粉笔风工具条，纯展示组件（状态由 DocumentViewer 持有，回调上传）：
 
-`tone` 决定 canvas 上套哪一组 filter（见「视觉规格」）。
+| 控件 | 行为 |
+| --- | --- |
+| 搜索输入框 | 输入即搜 → 向 `eventBus` 派发 `find` 事件；回车 = 下一个、Shift+回车 = 上一个（`findagain`） |
+| 命中计数 | 订阅 `updatefindmatchescount` / `updatefindcontrolstate`，显示 `3 / 17` |
+| 缩放 | `-` / `+` 按 1.2 / 0.8 乘 `currentScale`；`fit` 复位到 `page-width` |
+| 页码 | `pagechanging` 事件更新，显示 `3 / 8` |
+
+**find 事件的契约**（读 `web/pdf_viewer.mjs` 源码确认，不要凭记忆写）：
+
+```ts
+// 新搜索：type 传空串
+eventBus.dispatch('find', {
+  source, type: '', query,
+  caseSensitive: false, entireWord: false, matchDiacritics: false,
+  highlightAll: true, findPrevious: false
+});
+// 下一个 / 上一个：type 传 'findagain'，上一个再把 findPrevious 置 true
+```
+
+- `#onFind(state)` 实际读的字段就是 `type` / `query` / `caseSensitive` / `entireWord` / `findPrevious` / `highlightAll`。**没有 `phraseSearch`** —— 这个版本里不存在，别照抄老教程
+- `source` 这个版本的 `#onFind` **不校验**，传一个稳定对象即可（pdf.js 自己传的是 find bar 实例）
+- 命中计数来自 `updatefindmatchescount` 的 `event.matchesCount.current` / `.total`
+- 控制状态来自 `updatefindcontrolstate` 的 `event.state`（`FOUND: 0` / `NOT_FOUND: 1` / `WRAPPED: 2` / `PENDING: 3`）与 `event.previous`
+- **工具条不自己加防抖**：`#onFind` 内部对新搜索已有 `#findTimeout` 延迟调度，再叠一层只会让输入更迟钝。实测打字卡顿再补
+
+高亮由 pdf.js 自己画（源码里 `className = "highlight middle" + highlightSuffix`，样式已在 `pdf_viewer.css` 里），**不自己实现高亮**。
+
+**不拦截 Ctrl+F**：不注册、不 `preventDefault`，浏览器自带的查找栏照常打开、照常在文字层上匹配（决策 7）。
+
+### 一个会被这次改动引爆的既有 bug（顺手修）
+
+`+page.svelte:104` 的全局 `keydown` 监听**没有检查事件来源**。搜索框一出现，在里面打字就会：↑/↓ 移动文件树光标、Enter 打开文件 —— 打字把树搅乱。
+
+修法：`handleKeydown` 开头判断事件目标，落在 `input` / `textarea` / `[contenteditable]` 上就 `return`。这一条必须在接搜索框之前修掉，否则手点验证会被它干扰到没法判断别的功能是否正常。
 
 ## 视觉规格
 
@@ -283,6 +348,7 @@ props：`{ url: string, tone: 'chalk' | 'invert', title: string }`。
 | markdown `article` | `url(#chalk-writing)`（不变） |
 | typst 的 canvas | `url(#chalk-writing)`（文档在编译期已经是暗底粉笔色，只补颗粒） |
 | pdf 的 canvas | `invert(1) hue-rotate(180deg) sepia(0.3) saturate(1.3) brightness(1.05) url(#chalk-writing)`（起步参数，实现时目视调） |
+| 工具条 | `url(#chalk-writing)`（跟状态栏一致） |
 | 文字层 | **不套** —— 它本身透明，套了只会让选中高亮变糊 |
 | 整个 `.content-pane` | **不套** |
 
@@ -300,6 +366,8 @@ props：`{ url: string, tone: 'chalk' | 'invert', title: string }`。
 
 pdf.js 的文字层是真实 DOM 文字，选中由它保证。选中高亮的配色跟着站点的 `::selection`（`--bg3` 底 / `--fg` 字）走，落在暗底页面上可见；若实测对比不足，在 viewer 内覆盖 `.textLayer ::selection` 单独加一档对比。
 
+工具条按站点的粉笔语言做：Kalam 手写体、`--bg1` 底、`--grey1` 次要文字、输入框透明底 + `--bg4` 下边框，高度压在 `1.8em` 以内，不抢正文。
+
 ## 组件改动
 
 | 文件 | 动作 |
@@ -315,10 +383,12 @@ pdf.js 的文字层是真实 DOM 文字，选中由它保证。选中高亮的�
 | `src/lib/types.ts` | 改。`FsEntry` 加 `size` |
 | `src/routes/raw/[...path]/+server.ts` | 新增。pdf 字节 |
 | `src/routes/typst/[...path]/+server.ts` | 新增。编译后的 pdf / 422 诊断 |
-| `src/lib/components/DocumentViewer.svelte` | 新增。pdf.js viewer，两类文档共用 |
+| `src/lib/components/DocumentViewer.svelte` | 新增。pdf.js viewer 层接线，两类文档共用 |
+| `src/lib/components/DocumentToolbar.svelte` | 新增。搜索 / 缩放 / 页码，纯展示 |
 | `src/lib/components/ContentPane.svelte` | 改。按 kind 分派；markdown 样式与滤镜落位 |
 | `src/lib/components/Status.svelte` | 改。`size` 改用 `entry.size`，B/K/M 正常进位 |
-| `src/routes/+page.svelte` | 改。滤镜从整栏下沉到 article |
+| `src/routes/+page.svelte` | 改。滤镜下沉到 article；`handleKeydown` 忽略输入框来源 |
+| `static/pdfjs/{cmaps,standard_fonts}/` | 新增。从 `pdfjs-dist` 拷入（决策 11） |
 | `package.json` | 加 `pdfjs-dist` 依赖 |
 | `content/cv.typ` + `content/cv.pdf` | 新增。**占位样例**，跑通链路用，之后换成真文件 |
 
@@ -333,11 +403,13 @@ pdf.js 的文字层是真实 DOM 文字，选中由它保证。选中高亮的�
 `vitest` 只跑 `src/**/*.test.ts` 的纯逻辑（`vite.config.ts` 既有约定），组件仍靠手点。
 
 - `preview-kind.test.ts` —— 三种扩展名、大小写、无扩展名、`.mdx` / `.markdown` 这类近似值必须返回 null
-- `content-path.test.ts` —— `..%2f` 之类编码后穿越、`a/../b`、绝对路径、NUL、`.png` 非白名单、正常嵌套路径
+- `content-path.test.ts` —— 编码后的穿越、`a/../b`、绝对路径、NUL、`.png` 非白名单、正常嵌套路径
 - `content-tree.test.ts` —— 三类都进树、`.png` 不进、点号文件/目录不进、目录 size 不设、markdown 仍内联 content、typst/pdf 的 content 为 undefined
 - `typst-compile.test.ts` —— 临时 fixture 真调 typst，只断言这些能稳定断言的事：编译成功返回以 `%PDF` 开头的非空 Buffer、语法错误返回诊断且**不含 wrapper 的临时文件名**、wrapper 文件编译后被删除（fixture 目录里不再有 `.preview-*.typ`）、第二次调用命中缓存（不重新 spawn：拿编译产物的对象引用或 `mtimeMs` 判定）
 
 整组用 `describe.skipIf(!hasTypst)` 包住（`hasTypst` 用 `spawnSync('typst', ['--version'])` 判定），换一台没装 typst 的机器不至于整片挂掉。
+
+viewer 层与工具条是 DOM/Svelte 世界的东西，按既有约定不写单测。
 
 ## 验证
 
@@ -345,28 +417,56 @@ pdf.js 的文字层是真实 DOM 文字，选中由它保证。选中高亮的�
 2. `npm run test`
 3. 起 dev server 手点：
 
+**markdown 与建树**
+
 - [ ] markdown：点开 `readme.md`，观感与改动前**逐像素一致**（滤镜下沉后不能变糊或变清）
-- [ ] typst：点开 `content/cv.typ`，出现暗底粉笔页；内容与 `content/cv.pdf` 的排版一致（两栏、表格、彩色分隔线都在）
-- [ ] typst：文字**能拖选**，选中高亮与文字重合（错位就说明 `textLayer` 的 scale/尺寸没接好）
-- [ ] typst：多页文档滚到底，页数与内容正确；滚动时只渲染可见页（DevTools 里 canvas 数量不随页数线性增长）
-- [ ] pdf：点开 `content/cv.pdf`，白底被整页转成暗底亮字，观感接近 typst 那一版
-- [ ] pdf：文字能拖选；文档里的链接可点
+- [ ] 树里出现 `cv.typ` 与 `cv.pdf`；非三类的文件（临时塞一个 `.png`）不出现
+- [ ] 状态栏：pdf 显示真实字节数（不再是字符数）
+
+**typst**
+
+- [ ] 点开 `content/cv.typ`，出现暗底粉笔页；内容与 `content/cv.pdf` 的排版一致（两栏、表格、彩色分隔线都在）
+- [ ] 文字**能拖选**，选中高亮与文字重合（错位就说明文字层的 scale/尺寸没接好）
+- [ ] 多页文档滚到底，页数与内容正确；滚动时内存不随页数线性增长（viewer 的缓冲在起作用）
 - [ ] **编译错误**：故意在 `cv.typ` 里写 `#let x =`，右栏出现诊断面板且只报真实文件名与行号，不出现 `.preview-xxxx.typ`
-- [ ] 修好后重新打开能恢复，不需要重启 dev server（缓存按 mtime 失效）
-- [ ] 改一个被 `#include` 的片段，重新打开该文档，预览跟着变（deps 缓存失效生效）
+- [ ] 修好后重新打开能恢复，不需要重启 dev server；改一个被 `#include` 的片段，预览跟着变
+
+**pdf**
+
+- [ ] 点开 `content/cv.pdf`，白底被整页转成暗底亮字；有照片的 pdf 验一下反色的观感（这条是已知代价，确认能不能接受）
+- [ ] 文字能拖选；文档里的链接可点（`LinkTarget.BLANK` 走新标签）
+
+**两种检索（决策 7 的核心）**
+
+- [ ] **搜索栏**：搜一个**只出现在第 8 页**的词 → 命中计数正确、能跳过去、目标页被渲染出来并高亮
+- [ ] 搜索栏搜一个不存在的词 → 显示 `0 / 0`，不报错
+- [ ] **浏览器 Ctrl+F**：在**当前可见页**上搜一个词 → 浏览器查找栏命中并高亮
+- [ ] **Ctrl+F 的边界**：搜一个只出现在远处页的词 → 命不中（预期行为，文字层未渲染）。这一条要确认它**不报错、不崩**，只是没命中
+- [ ] 搜索框里打字时，文件树的 ↑/↓/Enter **纹丝不动**（既有 bug 已修）
+- [ ] 焦点在搜索框时按 Enter → 跳下一个命中，而不是打开文件树里的文件
+
+**布局与移动端**
+
+- [ ] 侧栏开合（pane 宽度 160ms 动画）后，页面重新 fit-width，不出现横向滚动条
+- [ ] 窄视口（≤640px）：pdf/typst 页面 fit-width；树浮层行为不变
+- [ ] 手机（或 DevTools 移动模拟）上打开 pdf：能渲染、能选中、能用搜索栏 —— 这是本次改动的主要动机，必须真机或模拟器验
+- [ ] 中文 pdf：塞一份中文 pdf，字形不缺、不乱码（验决策 11 的 cMaps / 标准字体是否真的接对了）
+
+**其他**
+
 - [ ] `curl --path-as-is -i 'localhost:5173/raw/../../etc/passwd'` 与编码变体一律 404，不返回文件（**必须带 `--path-as-is`**，否则 curl 自己就把 `..` 归一化了，测的是空气）
 - [ ] `curl -i localhost:5173/raw/readme.md` → 404（白名单只有 pdf）
-- [ ] 状态栏：pdf 显示真实字节数（不再是字符数）
-- [ ] 窄视口（≤640px）：pdf/typst 页面 fit-width、不横向溢出；树浮层行为不变
-- [ ] 手机（或 DevTools 移动模拟）上打开 pdf：能渲染且能选中 —— 这条是本次改动的主要动机，必须真机或模拟器验
 - [ ] 只看 markdown 时，Network 面板里**没有** pdf.js 的 chunk（懒加载生效）
+- [ ] 连续切换文件 10 次，DevTools 里 worker 数量不增长（卸载时 destroy 生效）
 
 ## 风险
 
-- **pdf.js 约 1.7 MB**（主包 458 KB + worker 1.26 MB + CSS 163 KB）。已用动态 import 懒加载，markdown-only 访客不受影响；首次点开 typst/pdf 会有一次可感知的下载
-- **整页滤镜会反色 pdf 内的图片/照片**，彩色图表也会失真（见「视觉规格」）。这是不做逐对象风格化的必然结果，用户已知悉并选择「统一风格化、去掉开关」
+- **pdf.js 约 2.2 MB**（主包 458 KB + worker 1.26 MB + viewer 层 320 KB + CSS 163 KB）。已用动态 import 懒加载，markdown-only 访客不受影响；首次点开 typst/pdf 会有一次可感知的下载
+- **`static/pdfjs/` 会让仓库变大**（cMaps + 标准字体约 2 MB 级）。访客只会按需拉取命中的那一个 `.bcmap` / 字体文件，不增加页面首屏负担，但仓库确实变大。若不接受，替代方案是加一条从 `node_modules` 流式读的只读路由 —— 复杂度更高，本次不做
+- **整页滤镜会反色 pdf 内的图片/照片**，彩色图表也会失真（见「视觉规格」）。这是不做逐对象风格化的必然结果，且已选择「统一风格化、去掉开关」
 - **主题色两处重复**：`+layout.svelte` 的 CSS 变量与 `typst-compile.ts` 的常量。服务端读不到 CSS，这是有意的取舍；改主题色要同步两处
-- **搜索框没有了**：原生 viewer 的搜索 UI 随之失去（决策 9）。文字层保证可选中；网页版 `Ctrl+F` 对文字层能否高亮未经验证，**不写进承诺**
+- **Ctrl+F 覆盖不到缓冲外的页**（约 10 页）。这是 pdf.js 写死的缓冲策略、没有公开选项；搜索栏补上完整覆盖。若将来嫌这个边界碍事，只能改常量或自己预渲染 —— 都不做
+- **全站搜索没有做**（决策 12）。它需要索引、结果列表、与「只靠文件树导航」的模型对接，是独立功能
 - **typst 编译需要写 `content/`**：wrapper 必须与文档同目录才能正确解析相对 include。编译中途进程被杀可能留下 `.preview-*.typ`；因为树跳过点号文件，对访客不可见，但会留在磁盘上
 - **首次编译可能要联网**：文档若用 `@preview` 包，typst 需下载；失败会走 422 诊断面板，不会白屏
 - **字体**：typst 用系统字体，服务端缺字体会**静默 fallback**，预览与作者本机不一致
