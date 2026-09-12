@@ -304,7 +304,7 @@ linkService.setViewer(viewer);
 
 | 控件 | 行为 |
 | --- | --- |
-| 搜索输入框 | 输入即搜 → 向 `eventBus` 派发 `find` 事件；回车 = 下一个、Shift+回车 = 上一个（`findagain`） |
+| 搜索输入框 | 输入即搜 → 向 `eventBus` 派发 `find` 事件；回车 = 下一个、Shift+回车 = 上一个（`again`） |
 | 命中计数 | 订阅 `updatefindmatchescount` / `updatefindcontrolstate`，显示 `3 / 17` |
 | 缩放 | `-` / `+` 按 1.2 / 0.8 乘 `currentScale`；`fit` 复位到 `page-width` |
 | 页码 | `pagechanging` 事件更新，显示 `3 / 8` |
@@ -318,7 +318,8 @@ eventBus.dispatch('find', {
   caseSensitive: false, entireWord: false, matchDiacritics: false,
   highlightAll: true, findPrevious: false
 });
-// 下一个 / 上一个：type 传 'findagain'，上一个再把 findPrevious 置 true
+// 下一个 / 上一个：type 传 'again'，上一个再把 findPrevious 置 true
+// （不是 'findagain' —— 那是老版本的名字，写错了会落进兜底分支）
 ```
 
 - `#onFind(state)` 实际读的字段就是 `type` / `query` / `caseSensitive` / `entireWord` / `findPrevious` / `highlightAll`。**没有 `phraseSearch`** —— 这个版本里不存在，别照抄老教程
@@ -470,6 +471,34 @@ viewer 层与工具条是 DOM/Svelte 世界的东西，按既有约定不写单�
 - [ ] `curl -i localhost:5173/raw/readme.md` → 404（白名单只有 pdf）
 - [ ] 只看 markdown 时，Network 面板里**没有** pdf.js 的 chunk（懒加载生效）
 - [ ] 连续切换文件 10 次，DevTools 里 worker 数量不增长（卸载时 destroy 生效）
+
+## 实现记录（2026-09-12，与设计的偏差）
+
+实现完成，`npm run check` 0 错误、`npm run test` 55 个用例全绿。以下是与设计不一致或设计里没写到的地方 —— 前两条是**照抄网上示例必然踩的坑**，只有真跑浏览器才能发现。
+
+| # | 事项 | 结论 |
+| --- | --- | --- |
+| 1 | viewer 层的加载契约 | `web/pdf_viewer.mjs` 是**独立 bundle**，第 1960 行直接 `const {...} = globalThis.pdfjsLib`。必须先把核心模块挂到 `globalThis.pdfjsLib` 再 import 它，否则 `Cannot destructure property 'AbortException' of 'globalThis.pdfjsLib'`。那篇搭建指南的片段漏了这步 |
+| 2 | 容器的硬性要求 | 构造 `PDFViewer` 时若容器有 `offsetParent` 而 `position` 不是 `absolute`，直接抛 `The 'container' must be absolutely positioned.`。所以 DOM 是「relative 外壳 + absolute 滚动容器 + `.pdfViewer`」三层 |
+| 3 | find 事件类型 | 是 `'again'` 不是 `'findagain'`（本 spec 原文写错，已改）。写错会落进兜底分支：选中会跳，但高亮与计数不按预期刷新 |
+| 4 | 命中计数 | 不用 `updatefindmatchescount` 的载荷：pdf.js 在 `PENDING` 阶段就派发它，那时 `_selected` 还是**推进前**的值，照它显示永远慢一步（实测回车后选中已到第二个、载荷仍是 1）。改成数 `.textLayer .highlight`、认带 `selected` 类的那个，并用 `MutationObserver` 去抖刷新 —— 固定延时会抢在"清空高亮"之前跑出旧数字 |
+| 5 | 反色后的页底 | 白底反色得到的是纯黑，比 `--bg0` 深一截。合成时补一步 `globalCompositeOperation = 'lighten'` + 填板色：黑底被抬到板色，正文比板色亮所以原样保留 |
+| 6 | 主题色的单一来源 | 新增 `src/lib/chalk-palette.ts`，由 `typst-compile.ts`（拼 wrapper）与 `DocumentViewer`（抬页底）共用。CSS 那份仍在 `+layout.svelte`，两处仍需同步 |
+| 7 | 顺带修掉的既有问题 | ① `+page.svelte` 的全局 keydown 不忽略输入框（打字会搅乱文件树，见正文）；② `FileTree.svelte` 的 `bind:this={rowElements[i]}` 绑到非响应式属性，Svelte 5 每次加载刷 8 条警告 —— 改成 `$state` 数组 |
+| 8 | 依赖 | `package.json` 里写着 `vitest` 但 `node_modules` 里**没装**，`npm run test` 原本跑不起来；已 `npm install` 补上，同时装 `pdfjs-dist@6.3.289` |
+| 9 | 验证手段 | 除 curl 外，用 `chromium --headless=new --remote-debugging-port` + CDP 脚本做了真实浏览器验证：截图、点文件树切文档、驱动搜索与缩放、收集未捕获异常。设计的验证清单里"必须真机/模拟器验"的项目，本次是用无头 Chromium 验的 |
+
+验证结果（真实浏览器）：
+
+- typst 路径：暗底粉笔页，两栏 grid、表格、链接、彩色分隔线、图片全部正确
+- pdf 路径：白底被转成板色页底，**照片保持原色**（图像豁免生效）
+- 状态栏：`cv.pdf` 显示 `23.4K`（真实字节），`cv.typ` 显示 `1.3K`
+- 搜索：`the` → `1 / 2` → 回车 `2 / 2` → 再回车回绕 `1 / 2` → Shift+回车反向；搜不存在的词 → `0 / 0` 且高亮为 0
+- 缩放：页宽 936 → 1120（放大）→ 937（适应宽度）
+- 路由：`/raw/cv.pdf` 200 + 正确头；`/typst/cv.typ` 200 + `%PDF-`；ETag 命中 304；`/raw/readme.md`、`/typst/cv.pdf`、`/raw/missing.pdf`、`--path-as-is` 穿越一律 404；编译失败 422 + 一行式诊断且不含 wrapper 文件名
+- 控制台干净：无未捕获异常、无警告
+
+**仍未验证的**：真机移动端（无头 Chromium 不等于 iOS Safari / Android Chrome）、`ctx.filter` 不可用时的 CSS 回退分支（Safari 路径）、多页文档的滚动与预取行为（样例只有 1 页）、`Ctrl+F` 在真实按键下的表现。
 
 ## 风险
 
