@@ -2,11 +2,11 @@
 
 Welcome. The tree on the left is the whole site; pick an article and it shows up on the right.
 
-| Key       | Action                        |
-| --------- | ----------------------------- |
-| `↓`       | Move the highlight down       |
-| `↑`       | Move the highlight up         |
-| `Enter`   | Open a folder / an article    |
+| Key     | Action                     |
+| ------- | -------------------------- |
+| `↓`     | Move the highlight down    |
+| `↑`     | Move the highlight up      |
+| `Enter` | Open a folder / an article |
 
 The arrow keys only move the highlight — press `Enter` to actually open something.
 The mouse works the same way: click a folder to fold it open, click an article to read it.
