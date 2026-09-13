@@ -37,6 +37,32 @@ export interface PrimitiveHit {
 }
 
 /**
+ * markdown 写法在 typst 里的下场。
+ *
+ * 这几条不是「风格问题」，是**静默失效**：typost 不认这些语法，但也不会报错，
+ * 于是它们会以字面字符的形式出现在页面上，或者让一行悄悄少一截。
+ *
+ * 加这个检查是因为这几条被反复踩到 —— 人（和我）写 markdown 的手感太强，
+ * 而 typst 的 markup 语法跟它长得像、规则却不同，正是最容易出错的地方。
+ */
+export const MARKDOWN_ISMS = {
+	'**': 'typst 的粗体是单星号 `*粗体*`，双星号会报 "no text within stars"',
+	'##': 'typst 的标题是等号 `=`，`#` 是代码入口，写 `##` 会直接编译失败',
+	'>': 'typst 的引用块是 `#quote(block: true)[...]`，`>` 会原样渲染成字面字符',
+	'|': 'typst 没有 markdown 表格语法，表格要写 `#table(...)`，`|` 会原样渲染'
+} as const;
+
+export type MarkdownIsm = keyof typeof MARKDOWN_ISMS;
+
+export interface MarkdownIsmHit {
+	kind: MarkdownIsm;
+	line: number;
+	text: string;
+	/** 人话解释这条为什么不行、该怎么写。 */
+	reason: string;
+}
+
+/**
  * 扫一份 typst 源码，返回所有会破坏 HTML 导出的摆放原语调用。
  *
  * 判定的是**调用**而不是**名字**：`#grid(` 与 `#grid[` 算命中，正文里提到
@@ -138,4 +164,54 @@ function findStringEnd(line: string, from: number): number {
 function callsPrimitive(code: string, primitive: string): boolean {
 	const pattern = new RegExp(`[#.]\\s*${primitive}\\s*[(\\[]`);
 	return pattern.test(code);
+}
+
+/**
+ * 扫一份 typst 源码，返回所有**会静默失效的 markdown 写法**。
+ *
+ * 只在代码围栏之外判定：代码块里的 `>`、`|`、`##` 是终端输出和 diff，
+ * 原样保留才是对的（课件的实验记录里全是这些）。注释里的也不算 ——
+ * 注释里写 `**结构 vs 视觉**` 是给人看的，typst 根本不解析。
+ *
+ * 判定刻意做得窄 —— 只认「行首」的那些：
+ *
+ * - `**` 出现在任何位置都算（typst 里它没有合法用途）
+ * - `##` 只认行首（正文里提到 `##` 是正常的，比如这句注释）
+ * - `>` 只认行首（`->`、`>=` 这类符号不该误报）
+ * - `|` 只认行首且行内还有第二个 `|`（markdown 表格的形状）
+ */
+export function findMarkdownIsms(source: string): MarkdownIsmHit[] {
+	const hits: MarkdownIsmHit[] = [];
+	const lines = source.split('\n');
+
+	let inFence = false;
+	let inBlockComment = false;
+
+	for (let index = 0; index < lines.length; index++) {
+		const raw = lines[index];
+
+		if (raw.trimStart().startsWith('```')) {
+			inFence = !inFence;
+			continue;
+		}
+		if (inFence) continue;
+
+		// 注释先抹掉 —— 注释里出现这些符号是正常的，而且它们不会被渲染
+		const scanned = stripCommentsAndStrings(raw, inBlockComment);
+		inBlockComment = scanned.inBlockComment;
+		const line = scanned.code;
+
+		const text = raw.trimEnd();
+		const push = (kind: MarkdownIsm) =>
+			hits.push({ kind, line: index + 1, text, reason: MARKDOWN_ISMS[kind] });
+
+		if (line.includes('**')) push('**');
+
+		const trimmed = line.trimStart();
+		if (/^#{2,}/.test(trimmed)) push('##');
+		if (/^>\s/.test(trimmed)) push('>');
+		if (/^\|.*\|/.test(trimmed)) push('|');
+	}
+
+	return hits;
 }

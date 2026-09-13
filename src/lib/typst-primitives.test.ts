@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { CONTENT_DIR } from './content-dir.server';
-import { findDroppedPrimitives } from './typst-primitives';
+import { findDroppedPrimitives, findMarkdownIsms } from './typst-primitives';
 
 describe('findDroppedPrimitives', () => {
 	test('命中 # 开头的调用', () => {
@@ -97,6 +97,50 @@ describe('findDroppedPrimitives', () => {
 });
 
 /**
+ * markdown 写法检查 —— 这几条被反复踩到，所以做成测试而不是靠记性。
+ *
+ * 它们共同的特征是**静默失效**：typst 不认，但也不报错（或只给一条含糊的
+ * "no text within stars"），于是错的东西直接出现在页面上。
+ */
+describe('findMarkdownIsms', () => {
+	test('双星号粗体：typst 用单星号', () => {
+		expect(findMarkdownIsms('这是**重点**内容').map((h) => h.kind)).toEqual(['**']);
+	});
+
+	test('井号标题：typst 用等号', () => {
+		expect(findMarkdownIsms('## 小节').map((h) => h.kind)).toEqual(['##']);
+		expect(findMarkdownIsms('### 更深').map((h) => h.kind)).toEqual(['##']);
+	});
+
+	test('行首的 > 引用：typst 用 #quote(block: true)', () => {
+		expect(findMarkdownIsms('> 引用一句').map((h) => h.kind)).toEqual(['>']);
+	});
+
+	test('markdown 表格行', () => {
+		expect(findMarkdownIsms('| 甲 | 乙 |').map((h) => h.kind)).toEqual(['|']);
+	});
+
+	/** 代码围栏里的这些字符是终端输出和 diff，原样保留才是对的。 */
+	test('代码块里的一律不算', () => {
+		const source = ['```sh', '## 这是 shell 注释', '> 这是提示符', '| 这是管道 |', 'a**b', '```'].join('\n');
+		expect(findMarkdownIsms(source)).toEqual([]);
+	});
+
+	test('正文里提到这些符号不算（只认行首的）', () => {
+		expect(findMarkdownIsms('markdown 用 `##` 写标题，typst 用 `=`。')).toEqual([]);
+		expect(findMarkdownIsms('箭头是 ->，比较是 >=。')).toEqual([]);
+		expect(findMarkdownIsms('按位或是 | 号。')).toEqual([]);
+	});
+
+	test('行号从 1 起，带原文与原因', () => {
+		const hit = findMarkdownIsms(['没问题', '这里有**粗体**'].join('\n'))[0];
+		expect(hit.line).toBe(2);
+		expect(hit.text).toBe('这里有**粗体**');
+		expect(hit.reason).toContain('单星号');
+	});
+});
+
+/**
  * content/ 下的每一份 .typ 都必须能安全导出成 HTML。
  *
  * 这条断言是这套预览管线唯一的静默失败通道的守门人：被丢弃的**容器**会连坐整棵
@@ -116,6 +160,20 @@ describe('content/ 里的 typst 文档', () => {
 			const source = await readFile(join(CONTENT_DIR, relativePath), 'utf-8');
 			for (const hit of findDroppedPrimitives(source)) {
 				problems.push(`${relativePath}:${hit.line}: #${hit.primitive} 在 HTML 导出下会被丢弃`);
+			}
+		}
+
+		expect(problems.join('\n')).toBe('');
+	});
+
+	test('不包含 markdown 写法（会静默失效或直接编译失败）', async () => {
+		const files = await collectTypstFiles(CONTENT_DIR);
+		const problems: string[] = [];
+
+		for (const relativePath of files) {
+			const source = await readFile(join(CONTENT_DIR, relativePath), 'utf-8');
+			for (const hit of findMarkdownIsms(source)) {
+				problems.push(`${relativePath}:${hit.line}: ${hit.kind} —— ${hit.reason}\n    ${hit.text}`);
 			}
 		}
 

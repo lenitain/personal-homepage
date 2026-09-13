@@ -12,12 +12,20 @@
 		query = $bindable(''),
 		matchLabel = '',
 		onFind,
-		onZoom
+		onZoom,
+		presenting = false,
+		slideLabel = '',
+		onTogglePresent
 	}: {
 		query: string;
 		matchLabel: string;
 		onFind: (direction: 'next' | 'previous') => void;
 		onZoom: (direction: 'in' | 'out' | 'fit') => void;
+		/** 是否正在演示。 */
+		presenting?: boolean;
+		/** 演示时的进度，形如 `3 / 12`；没有幻灯片时为空串。 */
+		slideLabel?: string;
+		onTogglePresent: () => void;
 	} = $props();
 
 	function handleSearchKeydown(event: KeyboardEvent) {
@@ -43,6 +51,21 @@
 	<span class="matches" aria-live="polite">{matchLabel}</span>
 
 	<span class="spacer"></span>
+
+	<!-- 演示进度只在演示时出现；阅读时留空，免得工具栏多一个永远不动的 0 / 0 -->
+	{#if presenting && slideLabel}
+		<span class="slide-progress" aria-live="polite">{slideLabel}</span>
+	{/if}
+
+	<button
+		type="button"
+		class="present"
+		class:active={presenting}
+		title={presenting ? '退出演示（Esc）' : '进入演示模式，一屏一张'}
+		aria-label={presenting ? '退出演示' : '进入演示模式'}
+		aria-pressed={presenting}
+		onclick={onTogglePresent}>{presenting ? '✕ 退出' : '▶ 演示'}</button
+	>
 
 	<button type="button" title="缩小" aria-label="缩小" onclick={() => onZoom('out')}>−</button>
 	<button type="button" title="放大" aria-label="放大" onclick={() => onZoom('in')}>+</button>
@@ -113,6 +136,17 @@
 
 	.spacer {
 		flex: 1;
+	}
+
+	.slide-progress {
+		color: var(--grey1);
+		flex-shrink: 0;
+		font-variant-numeric: tabular-nums;
+	}
+
+	/* 演示是这一栏里唯一「会改变整页」的动作，所以给它一点存在感 */
+	.present.active {
+		color: var(--orange);
 	}
 
 	button {

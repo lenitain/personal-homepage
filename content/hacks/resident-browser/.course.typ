@@ -26,6 +26,22 @@
 /// 绿色下划线那条样式，跟 readme 的观感一致）。所以章标题不用 `=`，用这个。
 #let title(body) = html.elem("h1", body)
 
+/// 一张幻灯片。演示模式下它就是「一屏」，阅读模式下只是一个普通分节。
+///
+/// 幻灯片版专用 —— 文档版不用它，两者的切法不同（见 slides/ 目录）。
+///
+/// HTML 目标下交出 `<section class="c-slide">`，翻页交给站点的 CSS（scroll-snap）
+/// 和键盘处理；PDF 目标下退化成真正的分页。这样同一份幻灯片源既能当网页讲，
+/// 也能导出成 PDF 带走。
+#let slide(body) = context {
+  if target() == "html" {
+    html.elem("section", body, attrs: (class: "c-slide"))
+  } else {
+    pagebreak(weak: true)
+    body
+  }
+}
+
 /// 内部：交出一个带标签的容器。label 为 none 时不渲染标签行。
 #let _box(kind, label, body) = context {
   if target() == "html" {

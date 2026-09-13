@@ -7,6 +7,8 @@
 	import ContentPane from '$lib/components/ContentPane.svelte';
 	import Status from '$lib/components/Status.svelte';
 	import { findFileTreeEntry, flattenFileTree } from '$lib/file-tree';
+	import { isPresenting } from '$lib/presentation';
+	import { isTextEntryTarget } from '$lib/text-entry';
 	import type { FsEntry } from '$lib/types';
 
 	let { data } = $props();
@@ -24,13 +26,6 @@
 	}
 
 	const tree = $derived(data.tree);
-
-	/** 焦点是否落在输入控件里 —— 全局键盘快捷键要给输入让路。 */
-	function isTextEntryTarget(target: EventTarget | null): boolean {
-		if (!(target instanceof HTMLElement)) return false;
-		if (target.isContentEditable) return true;
-		return ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
-	}
 
 	/** 展开了哪些目录。空集合 = 全部折叠，这就是首屏的样子。 */
 	const expandedPaths = new SvelteSet<string>();
@@ -109,6 +104,10 @@
 	}
 
 	function handleKeydown(event: KeyboardEvent) {
+		// 演示模式接管方向键和空格（翻页）。这里必须让路，否则翻一张幻灯片
+		// 会把左边文件树的光标也顺带挪一格，而用户完全看不见这件事。
+		if (isPresenting()) return;
+
 		// 树收起来的时候不给键盘操作，免得看不见的光标在动
 		if (!sidebarOpen) return;
 

@@ -3,6 +3,13 @@
 	import { marked } from 'marked';
 	import DocumentToolbar from './DocumentToolbar.svelte';
 	import { readFontScale, resetFontScale, stepFontScale } from '$lib/preview-zoom';
+	import {
+		isPresenting,
+		nearestSlideIndex,
+		setPresenting,
+		stepSlide
+	} from '$lib/presentation';
+	import { isTextEntryTarget } from '$lib/text-entry';
 	import type { PreviewKind } from '$lib/preview-kind';
 
 	/**
@@ -135,6 +142,142 @@
 	function zoom(direction: 'in' | 'out' | 'fit') {
 		fontScale = direction === 'fit' ? resetFontScale() : stepFontScale(direction);
 	}
+
+	/* ---- 演示模式：把讲义当幻灯片翻 ---- */
+
+	/**
+	 * 演示状态放在模块里（见 $lib/presentation），因为 +page.svelte 的全局键盘处理
+	 * 也要知道现在是不是在演示 —— 否则翻页的 ↑/↓ 会同时把左边文件树的光标挪走。
+	 */
+	let presenting = $state(isPresenting());
+	/** 当前第几张（0 起），-1 表示这篇没有幻灯片。 */
+	let slideIndex = $state(-1);
+	/** 这篇有几张。 */
+	let slideCount = $state(0);
+
+	let slideLabel = $derived(slideIndex >= 0 ? `${slideIndex + 1} / ${slideCount}` : '');
+
+	/** 每张幻灯片相对滚动容器的顶部偏移量。进演示时量一次，窗口尺寸变了再量。 */
+	let slideOffsets: number[] = [];
+
+	function measureSlides() {
+		if (!pane) {
+			slideOffsets = [];
+			slideCount = 0;
+			slideIndex = -1;
+			return;
+		}
+
+		const slides = Array.from(pane.querySelectorAll<HTMLElement>('.c-slide'));
+		slideCount = slides.length;
+
+		if (slides.length === 0) {
+			slideOffsets = [];
+			slideIndex = -1;
+			return;
+		}
+
+		const base = pane.getBoundingClientRect().top;
+		slideOffsets = slides.map((slide) => slide.getBoundingClientRect().top - base + pane!.scrollTop);
+		slideIndex = nearestSlideIndex(slideOffsets, pane.scrollTop);
+	}
+
+	function goToSlide(index: number) {
+		if (!pane || index < 0 || index >= slideOffsets.length) return;
+		pane.scrollTo({ top: slideOffsets[index], behavior: 'smooth' });
+	}
+
+	function stepPresentation(step: number) {
+		goToSlide(stepSlide(slideIndex, step, slideCount));
+	}
+
+	function togglePresenting() {
+		setPresenting(!presenting);
+		presenting = isPresenting();
+	}
+
+	/**
+	 * 进演示时量一次偏移量。退出时把滚动位置留在原处 —— 读者从哪张退出来的，
+	 * 阅读模式就停在哪一段，不把人弹回开头。
+	 */
+	$effect(() => {
+		if (!pane) return;
+		if (!presenting) return;
+
+		// 等一帧：切换瞬间 article 的样式还在改，量出来的偏移量是旧的
+		const raf = requestAnimationFrame(() => measureSlides());
+		return () => cancelAnimationFrame(raf);
+	});
+
+	/** 滚动时更新「现在第几张」。用 rAF 合流，避免每次 scroll 事件都做一次 DOM 测量。 */
+	$effect(() => {
+		if (!pane || !presenting) return;
+
+		let queued = false;
+		const onScroll = () => {
+			if (queued) return;
+			queued = true;
+			requestAnimationFrame(() => {
+				queued = false;
+				if (pane) slideIndex = nearestSlideIndex(slideOffsets, pane.scrollTop);
+			});
+		};
+
+		pane.addEventListener('scroll', onScroll, { passive: true });
+		return () => pane?.removeEventListener('scroll', onScroll);
+	});
+
+	/** 窗口尺寸变了，偏移量全部失效 —— 重量一次，否则翻页会跳错地方。 */
+	$effect(() => {
+		if (!presenting) return;
+
+		const onResize = () => measureSlides();
+		window.addEventListener('resize', onResize);
+		return () => window.removeEventListener('resize', onResize);
+	});
+
+	/**
+	 * 演示时的键盘导航。挂在 window 上而不是容器上：演示时用户不会先去点一下文档，
+	 * 焦点很可能还在左边的树上。
+	 */
+	$effect(() => {
+		if (!presenting) return;
+
+		const onKeydown = (event: KeyboardEvent) => {
+			if (isTextEntryTarget(event.target)) return;
+
+			switch (event.key) {
+				case 'ArrowRight':
+				case 'ArrowDown':
+				case 'PageDown':
+				case ' ':
+					event.preventDefault();
+					stepPresentation(1);
+					break;
+				case 'ArrowLeft':
+				case 'ArrowUp':
+				case 'PageUp':
+					event.preventDefault();
+					stepPresentation(-1);
+					break;
+				case 'Home':
+					event.preventDefault();
+					goToSlide(0);
+					break;
+				case 'End':
+					event.preventDefault();
+					goToSlide(slideCount - 1);
+					break;
+				case 'Escape':
+					event.preventDefault();
+					togglePresenting();
+					break;
+			}
+		};
+
+		window.addEventListener('keydown', onKeydown);
+		return () => window.removeEventListener('keydown', onKeydown);
+	});
 </script>
 
 {#if error}
@@ -143,9 +286,17 @@
 		<pre>{error.join('\n')}</pre>
 	</div>
 {:else}
-	<DocumentToolbar bind:query {matchLabel} onFind={find} onZoom={zoom} />
+	<DocumentToolbar
+		bind:query
+		{matchLabel}
+		onFind={find}
+		onZoom={zoom}
+		{presenting}
+		{slideLabel}
+		onTogglePresent={togglePresenting}
+	/>
 
-	<div class="document-scroll" bind:this={pane}>
+	<div class="document-scroll" class:presenting bind:this={pane}>
 		<article style="font-size: {fontScale}em">{@html html}</article>
 	</div>
 {/if}
@@ -491,6 +642,81 @@
 		border: 1px solid var(--bg4);
 		padding: 0.55em 0.75em;
 		min-width: 0; /* 允许内容收缩，否则宽代码块会把网格撑破 */
+	}
+
+	/* ---- 演示模式：一屏一张 ---- */
+
+	/*
+	 * 用 scroll-snap 做「翻页」。为什么不用真 PDF：typst 的 HTML 导出没有「页」这个概念
+	 * （`#set page` 和 `#pagebreak()` 都是摆放原语，会被丢弃并报 warning），
+	 * 而换 PDF 要付出按语义元素配色的能力。详见 $lib/presentation 顶部的取舍说明。
+	 *
+	 * 高度链：.document-scroll 是 flex:1 的滚动容器（高度确定）→ article 撑满它
+	 * → 每张 c-slide 撑满 article。于是每张恰好一屏，不需要 vh 或容器查询单位。
+	 */
+	.document-scroll.presenting {
+		scroll-snap-type: y mandatory;
+	}
+
+	.document-scroll.presenting article {
+		height: 100%;
+	}
+
+	.document-scroll.presenting article :global(.c-slide) {
+		height: 100%;
+		box-sizing: border-box;
+		scroll-snap-align: start;
+		/* always：一次按键只翻一张，不因为滚动惯性连翻两三张 */
+		scroll-snap-stop: always;
+		display: flex;
+		flex-direction: column;
+		/* safe：内容比一屏高时不要把它顶部裁掉 */
+		justify-content: safe center;
+		padding: 3em 2.5em;
+	}
+
+	/*
+	 * 演示时正文要大一点。演示是「一屋子人看一块屏」，阅读是「一个人凑近看」，
+	 * 这两个场景该有不同的默认字号 —— 用户仍然可以用工具栏的 ± 覆盖。
+	 */
+	.document-scroll.presenting article :global(.c-slide > p),
+	.document-scroll.presenting article :global(.c-slide li) {
+		line-height: 1.75;
+	}
+
+	/* 演示时每张幻灯片之间画一条分隔，滚动过程中能看出边界在哪 */
+	.document-scroll.presenting article :global(.c-slide + .c-slide) {
+		border-top: 1px dashed var(--bg4);
+	}
+
+	/*
+	 * 打印 / 另存为 PDF。浏览器打印是唯一「从 HTML 拿到真分页」的途径 ——
+	 * 它走的是另一套排版引擎（paged media），不经过 typst 的 HTML 导出，
+	 * 所以这里的 `break-before` 是真管用的。
+	 *
+	 * 粉笔滤镜打印出来是糊的，底色也费墨，一并去掉。
+	 */
+	@media print {
+		article {
+			filter: none;
+		}
+
+		article :global(.c-slide) {
+			break-before: page;
+			break-inside: avoid;
+		}
+
+		article :global(.c-slide:first-of-type) {
+			break-before: auto;
+		}
+
+		/* 深色底打印会变成一片黑，翻成白底黑字 */
+		article :global(.c-box),
+		article :global(.c-col),
+		article :global(pre) {
+			background: none;
+			border-color: #999;
+		}
 	}
 
 	article :global(.c-col > p:first-child) {
