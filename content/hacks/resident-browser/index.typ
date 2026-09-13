@@ -1,0 +1,97 @@
+#import ".course.typ": title, think, wrong, lab
+
+#set document(title: "课程导览")
+
+#title[课程导览：一个已经开着的浏览器]
+
+qutebrowser 启动要大约 1.2 秒。窗口先出来，然后页面才出来。它不是个慢程序，
+但 1.2 秒足够让你每次都注意到 —— 一天二十次。
+
+这门课记录的是把它压到 232 毫秒的全过程，以及*代价到底是什么*。
+里面没有一处是在让浏览器本身变快。
+
+= 这门课的形状
+
+它从一个具体问题出发，走成三个决定：
+
++ *什么样的程序值得常驻* —— 一个判据，不是一块秒表。
++ *谁负责收尸* —— 最容易被跳过、也最贵的一步。包含我犯的那个 PID namespace 错误，
+  以及它顺手带走的输入法。
++ *什么该留在 RAM，什么不该* —— 浏览器 profile 里大部分字节是死的。
+  把它们全放进内存是最直觉的做法，也是错的。
++ *快路径用什么写* —— 同一个启动器，五种语言九个实现，量延迟、系统调用、
+  地址空间和体积。外加写它们时抓出来的一个缓冲区溢出。
+
+= 怎么读
+
+每一章都尽量按同一个节奏走，而这个节奏就是这门课真正想教的东西：
+
+- 先摆出*当时的问题*
+- 然后是*我的猜测* —— 包括猜错的那种
+- 接着是*一个可以照着跑的实验*，以及它跑出来的原始输出
+- 然后看*哪里跟预期不一样*，以及为什么
+- 最后才收成一条能带走的判断
+
+所以你会看到很多“先停一下”，那是留给你自己先回答的。请真的停一下 ——
+直接看答案的话，这门课就只剩下结论了，而结论是最不值钱的部分。
+
+#think[
+  为什么结论最不值钱？
+
+  因为数字和实现会被更好的工具、更强的模型重新做一遍。而“为什么问这个问题、
+  当时期待看到什么、被什么打脸、于是怎么改假设”不会。
+  *这门课想留下的是后者。*
+]
+
+= 实验材料
+
+每一章里的实验都是真跑过的，输出直接贴在里面。想自己重跑的话，器材在这里：
+
+/ `docs/labs/resident-browser/01-namespace-failure-modes.sh`: PID namespace 的三个失败面
+/ `docs/labs/resident-browser/02-cgroup-vs-mainpid.sh`: scope 和 service 差在哪
+/ `docs/labs/resident-browser/03-resident-memory.sh`: 常驻到底占多少内存
+/ `docs/labs/resident-browser/overflow-check.sh`: C 版缓冲区溢出的边界
+/ `docs/labs/resident-browser/launchers/`: 九个实现，五种语言
+/ `docs/labs/resident-browser/build-all.sh`: 全部构建 + 测量
+
+两条使用须知，都是踩出来的：
+
+- *测量脚本要绑核*（`taskset`）。在一台开着桌面会话的机器上不绑核，
+  同一份代码的读数能差一半。
+- *`overflow-check.sh` 必须在 mount namespace 里跑*，它自己会做。
+  那个 bug 的失败模式包含「`execve` 成功」这一种，直接跑会真的拉起你的浏览器。
+
+= 结果
+
+#table(
+  columns: (1fr, auto, auto),
+  table.header([], [之前], [之后]),
+  [打开一个页面], [1227 ms], [232 ms],
+  [常驻成本], [0], [140 MiB],
+  [进程树], [1], [2–5],
+  [启动器开销], [—], [317 µs],
+  [生命周期保证], [无], [pid 1 级],
+)
+
+一行版本：*把开销恒定的那部分保温，把它的生命周期交给一个本来就管生命周期的东西，
+把一切死的字节赶回磁盘。*
+
+= 代码
+
+全都在我的 dotfiles 里：
+
+- #link("https://github.com/lenitain/dotfiles/blob/main/dotfiles/.config/qutebrowser/config.py")[qutebrowser 配置]
+  —— 缓存相关的决定都写在注释里
+- #link("https://github.com/lenitain/dotfiles/blob/main/dotfiles/.local/bin/scripts/qb-server")[`qb-server`]
+  —— 打了补丁、零窗口也不退出的 qutebrowser
+- #link("https://github.com/lenitain/dotfiles/blob/main/dotfiles/.local/bin/scripts/qb-open.c")[`qb-open`]
+  —— C 写的启动器，191 行
+- #link("https://github.com/lenitain/dotfiles/blob/main/dotfiles/.config/systemd/user/qb-server.service")[`qb-server.service`]
+  —— 交出去的生命周期
+
+= 从哪开始
+
+如果只读一章，读《谁负责收尸》—— 那一章的实验最完整，
+而且它教的是一次*调试*，不是一个结论。
+
+否则就按左边文件树里的顺序往下走。
