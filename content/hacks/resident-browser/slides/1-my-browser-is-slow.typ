@@ -28,66 +28,26 @@
 ]
 
 #slide[
-  = 它不是一步，是两步
+  = 新进程的创建分为两步
 
-  直觉：敲一个命令，系统新建一个进程去跑它。
+  *先复制一个现有的进程，再把复制品的内容换掉。*
 
-  实际：*先复制一个现有的进程，再把复制品的内容换掉。*
+  两个步骤对应的系统调用分别是 `fork` 和 `execve`。
 
-  两步各有名字：`fork` 和 `execve`。
-
-  #note[名字不用记，看它们做什么就行。]
+  #note[两者都声明在 `<unistd.h>`（POSIX 标准头文件）中]
 ]
 
 #slide[
-  = 第一步 fork：把一个进程变成两个
+  = 新进程的创建被分为两步是刻意的工程设计
 
-  ```c
-  printf("fork 之前：pid = %d\n", getpid());
-  pid_t pid = fork();          /* 这一行之后，代码在两个进程里同时往下走 */
+  既然要的是「跑一个新程序」，为什么不一步到位？
 
-  if (pid == 0)  printf("  [子进程] pid = %d\n", getpid());
-  else         { printf("  [父进程] pid = %d\n", getpid()); wait(NULL); }
-  ```
-
-  ```sh
-  $ ./forkonly
-  fork 之前：我是一个进程，pid = 135280
-    [子进程] 我是复制出来的那一份，pid = 135281，我的父进程是 135280
-    [父进程] 我还在，pid = 135280，我复制出来的那个是 135281
-  ```
-
-  `fork` 只调用了一次，但它下面的代码*两个进程各跑了一遍*。
-]
-
-#slide[
-  = 第二步 execve：换掉内容，但不换进程
-
-  复制出来的那份内容跟原来一模一样 —— 它还是 shell。
-  所以还要把内容换成你真正想跑的程序。
-
-  ```sh
-  $ ./pidcheck
-    [sh 说] 我是 pid 135297
-    [父进程] 我 fork 出来的 pid = 135297
-  ```
-
-  *两个 pid 一样。*
-
-  #punch[execve 不产生新进程，它只是把同一个进程里装的东西换掉。]
-]
-
-#slide[
-  = 分成两步不是偶然，是故意留出中间那一步
-
-  既然要的是「跑一个新程序」，为什么不一步到位？因为*中间那一步有用*。
-
-  你敲 `echo hello > out.txt` 的时候，shell 并不是「让 echo 去写文件」——
+  比如输入 `echo hello > out.txt` 的时候，shell 并不是「让 echo 去写文件」——
   echo 根本不知道有文件这回事。
 
-  实际是：shell `fork` 出自己 → 子进程把「标准输出」改成那个文件 → 才 `exec` echo。
+  实际情况是 shell `fork` 出自己，子进程「标准输出」改成那个文件后才 `exec` echo。
 
-  #note[管道 `|` 是同一个套路，只是把「指向文件」换成「指向另一个进程」。]
+  #note[这套机制保证了资源的复用。环境变量、标准输出、文件描述符等资源不需要在每个进程创建时额外设置，而是继承自父进程。]
 ]
 
 #slide[
@@ -338,6 +298,37 @@
   ```
 
   *一共 109 个模块，光把它们导进来就要 90 毫秒。*
+]
+
+#slide[
+  = 体检四：把那 1.2 秒切成几段
+
+  给全程打时间戳，找可以外部观测的界标：
+
+  ```sh
+  02:36:43.113   0          execve("/usr/bin/qutebrowser")   起点
+  02:36:43.346   +233 ms    第一个 libQt6*.so 被打开        Python 阶段结束
+  02:36:44.360   +1247 ms   第一次 connect 到 wayland        窗口要出现了
+  ```
+
+  #punch[前 233 毫秒是 Python，后 1014 毫秒是 Qt 和 QtWebEngine。]
+]
+
+#slide[
+  = 那 1014 毫秒具体在干什么
+
+  ```sh
+  qutebrowser/qt/webkit.py  (+ .pyc)                ← 导入 QtWebEngine 模块
+  /usr/lib/qt6/plugins/platforms/libqwayland.so     ← Qt 装载平台后端
+  /usr/lib/libOpenGL.so.0  libharfbuzz  libfreetype  libpng16 …
+  /dev/shm/.org.chromium.Chromium.*                 ← Chromium 建共享内存段
+  ```
+
+  同一时间窗的系统调用：`openat` 932、`read` 1508、`newfstatat` 1304、`mmap` 1007
+
+  *这是一段大量的小文件操作，不是在算东西。*
+
+  #note[⚠️ 这次 trace 里 QtWebEngineProcess 一次都没出现，而体检二里连 --version 都会起两个。差别在哪还没查清，记在这里而不是猜一个解释。]
 ]
 
 #slide[

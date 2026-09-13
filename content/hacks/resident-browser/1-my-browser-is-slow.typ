@@ -400,6 +400,76 @@ $ python3 -X importtime -c "import qutebrowser.qutebrowser"
 
 （完整脚本：`docs/labs/resident-browser/08-qutebrowser-checkup.sh`）
 
+
+== 体检四：把那 1.2 秒切成几段
+
+前面三步是分项看。这一节把它放回时间线上：给启动全程打上时间戳，
+然后找几个*可以外部观测*的界标。
+
+```sh
+$ strace -f -tt -o trace.txt qutebrowser -R about:blank
+```
+
+三个界标（时刻取自一次真实运行）：
+
+#table(
+  columns: (auto, auto, 1fr),
+  table.header([时刻], [相对], [事件]),
+  [02:36:43.113], [0], [`execve("/usr/bin/qutebrowser")` —— 起点],
+  [02:36:43.346], [*+233 ms*], [第一个 `libQt6*.so` 被打开 —— Python 阶段结束],
+  [02:36:44.360], [*+1247 ms*], [第一次 connect 到 wayland —— 窗口要出现了],
+)
+
+于是这 1.25 秒大致分成两段：*前 233 毫秒是 Python*，*后 1014 毫秒是 Qt 和 QtWebEngine*。
+跟体检三的 90 ms import 账单对得上 —— Python 那一侧的量级是对的。
+
+=== 那 1014 毫秒具体在干什么
+
+把这一段（+0.25s 到 +1.30s）里打开的路径按次数排出来：
+
+```sh
+  qutebrowser/qt/webkit.py  (+ .pyc)                   ← 导入 QtWebEngine 模块
+  /usr/lib/qt6/plugins/platforms/libqwayland.so       ← Qt 装载平台后端
+  /usr/lib/qt6/plugins/wayland-shell-integration/libxdg-shell.so
+  /usr/lib/libOpenGL.so.0   libGLdispatch.so.0
+  /usr/lib/libharfbuzz.so.0 libfreetype.so.6  libpng16.so.16  libgraphite2.so.3
+  /usr/lib/libdbus-1.so.3   libxcb.so.1  libXau.so.6  libXdmcp.so.6
+  /dev/shm/.org.chromium.Chromium.*                   ← Chromium 建共享内存段
+```
+
+同一段时间窗里的系统调用画像：
+
+#table(
+  columns: (auto, auto, 1fr),
+  table.header([系统调用], [次数], [说明]),
+  [`openat`], [932], [打开文件],
+  [`read`], [1508], [读内容],
+  [`newfstatat`], [1304], [问「这个文件在不在、多大」],
+  [`mmap`], [1007], [映射进地址空间],
+  [`fstat` / `lseek` / `close`], [875 / 630 / 916], [读完收尾],
+  [`clock_gettime`], [2496], [各处计时],
+)
+
+*这是一段大量的小文件操作，不是在算东西。* 顺序上很清楚：
+先导入 QtWebEngine 的 Python 模块，然后 Qt 装载平台后端和一堆本地库，
+最后 Chromium 建立自己的共享内存。这三件事串起来就是那 1014 毫秒。
+
+=== ⚠️ 这次量出来的，跟体检二对不上
+
+体检二里，连 `qutebrowser --version` 都会 exec 出两个 `QtWebEngineProcess`。
+但这一整份 trace 里，`QtWebEngineProcess` *一次都没出现*。
+
+`strace -f` 会跟随所有 fork，所以这不是漏抓 —— 是这次运行*真的没有起那个进程*。
+差别在哪，我还没查清楚（怀疑跟 `about:blank` 有关：没有真页面要渲染）。
+
+记在这里而不是猜一个解释。
+
+=== 还没拆出来的
+
++   adblock 规则解析 —— trace 里没找到对应的文件打开，还没定位到它在哪一段
++   profile 装载 —— 同样没有 `.sqlite` 出现在 trace 里（`-R` 跳过了会话恢复）
++   这 1.25 秒是「新 profile」还是「你的真实 profile」下的数字，也还没对比
+
 == 体检到此为止：还有一大段没量
 
 上面三步量到的，只是「解释器起来 + 模块导完」这一段。而 1.2 秒里还有：
@@ -430,24 +500,26 @@ $ python3 -X importtime -c "import qutebrowser.qutebrowser"
 +   解释器要做四件事：找库、搬进来、修正地址、调初始化
 +   这一整套每次启动都要付，而且跟程序要做什么无关
 
-*关于 qutebrowser，只量到了开头一段：*
+*关于 qutebrowser：*
 
 +   它不是一个二进制，是一个 970 字节的 Python 脚本
 +   光把 Python 模块导进来就要 90 毫秒
-+   连 `--version` 都会起两个 QtWebEngine 的 zygote 进程
++   从敲命令到窗口要出现一共 1.25 秒，切成两段：
+    *前 233 毫秒是 Python，后 1014 毫秒是 Qt 和 QtWebEngine*
++   后面那 1014 毫秒做的事很具体：导入 QtWebEngine 模块 → Qt 装载平台后端 →
+    一大堆本地库被映射进来 → Chromium 建立共享内存。
+    全是*文件操作*，不是在算东西
 
 *还不知道的：*
 
-+   Qt 初始化花了多少
-+   QtWebEngine 初始化花了多少
-+   adblock 规则解析、profile 装载、窗口创建各花多少
-+   那 1.2 秒里，究竟哪几段是「每次都一样」的
++   adblock 规则解析在哪一段 —— 没定位到
++   profile 装载在哪一段 —— 这次跑的是 `-R`，跳过了会话恢复
++   换成真实 profile（带会话恢复）会多出多少
++   那 1.25 秒里，究竟哪几段是*每次都完全一样*的
 
 #punch[
-  最后一条才是关键。*在量出「哪几段是恒定的」之前，
-  谈任何「能不能把这部分拆开、只付一次」都是空话。*
+  最后一条才是关键。在量出「哪几段是恒定的」之前，
+  谈任何「能不能把这部分拆开、只付一次」都是空话。
 ]
 
 这件事是下一章要做的。
-
-下一章回到开头的那个问题：*什么样的程序值得为它做这件事。*
