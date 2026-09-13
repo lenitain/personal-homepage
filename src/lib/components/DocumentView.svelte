@@ -224,6 +224,25 @@
 		margin: 0.4em 0 0.15em;
 	}
 
+	/*
+	 * 术语表。typst 的 `/ 术语: 解释` 交出 `<dl><dt><dd>`，而浏览器默认把 dt 和 dd
+	 * 排成两行普通文字 —— 名字和解释分不出来。课件里用它列「脚本 → 干什么」，
+	 * 所以术语要跟正文区分开、解释要缩进。
+	 */
+	article :global(dl) {
+		margin: 0.4em 0;
+	}
+
+	article :global(dt) {
+		color: var(--aqua);
+		margin-top: 0.4em;
+	}
+
+	article :global(dd) {
+		margin: 0.1em 0 0 1.2em;
+		line-height: 1.6;
+	}
+
 	article :global(p) {
 		color: var(--fg);
 		margin: 0.4em 0;
@@ -348,80 +367,6 @@
 		color: var(--grey2);
 	}
 
-
-	/* ---- 课件专用：typst 侧交出的块，长相在这里定 ---- */
-
-	/*
-	 * 三种块对应课件里反复出现的三个动作。内容侧只给 class
-	 * （见 content/hacks/resident-browser/.course.typ），颜色和间距全在这里 ——
-	 * 这是本站「内容管语义、样式管长相」那条分工的具体落点。
-	 */
-	article :global(.course-box) {
-		background: var(--bg1);
-		border-left: 3px solid var(--grey1);
-		padding: 0.5em 0.8em;
-		margin: 0.7em 0;
-		/* 框里的文字不经过 <p>，行高得在这里补，否则比正文挤 */
-		line-height: 1.6;
-	}
-
-	/* 框内首个段落不再叠一层外边距，否则框会显得上头空一块 */
-	article :global(.course-box > p) {
-		margin: 0;
-	}
-
-	/* 框内后续的块之间给一点呼吸，但不撑开 */
-	article :global(.course-box > p + p),
-	article :global(.course-box > pre),
-	article :global(.course-box > ul),
-	article :global(.course-box > ol),
-	article :global(.course-box > table) {
-		margin-top: 0.45em;
-	}
-
-	article :global(.course-box-title) {
-		color: var(--grey2);
-		font-size: 0.85em;
-		letter-spacing: 0.06em;
-		margin: 0 0 0.3em;
-	}
-
-	article :global(.course-box-think) {
-		border-left-color: var(--aqua);
-	}
-
-	article :global(.course-box-think .course-box-title) {
-		color: var(--aqua);
-	}
-
-	article :global(.course-box-wrong) {
-		border-left-color: var(--red);
-	}
-
-	article :global(.course-box-wrong .course-box-title) {
-		color: var(--red);
-	}
-
-	article :global(.course-box-lab) {
-		border-left-color: var(--yellow);
-	}
-
-	article :global(.course-box-lab .course-box-title) {
-		color: var(--yellow);
-	}
-
-	/* lab 框里套着代码块，是第二层框了 —— 压平一点，免得嵌套太吵 */
-	article :global(.course-box-lab pre) {
-		background: var(--bg0);
-		border-color: var(--bg4);
-	}
-
-	/* 窄屏下框的内边距收一点，正文才不至于被挤成一条 */
-	@media (max-width: 640px) {
-		article :global(.course-box) {
-			padding: 0.4em 0.6em;
-		}
-	}
 
 	/* 窄屏下两栏并排放不下，摊成一栏 */
 	@media (max-width: 640px) {
