@@ -49,12 +49,11 @@
 		 *
 		 * 逐字降级，靠的是浏览器原生行为，不需要任何逻辑：
 		 *   英文数字 → Kalam；Kalam 缺字 → Patrick Hand
-		 *   中文     → ZCOOL KuaiLe；它缺字或加载失败 → LXGW WenKai → Ma Shan Zheng
+		 *   中文     → LXGW WenKai；它缺字或加载失败 → Ma Shan Zheng
 		 *   最后     → generic
-		 * 尾部不再点名任何具体字体：连三个中文字体都拿不到时，就认了系统默认。
+		 * 尾部不再点名任何具体字体：连两个中文字体都拿不到时，就认了系统默认。
 		 */
-		--font-chalk: 'Kalam', 'Patrick Hand', 'ZCOOL KuaiLe', 'LXGW WenKai', 'Ma Shan Zheng',
-			cursive, sans-serif;
+		--font-chalk: 'Kalam', 'Patrick Hand', 'LXGW WenKai', 'Ma Shan Zheng', cursive, sans-serif;
 
 		background: var(--bg0);
 		color: var(--fg);

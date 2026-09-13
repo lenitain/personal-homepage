@@ -42,18 +42,21 @@ describe('字体栈的唯一真源', () => {
 		expect(filesHardcodingFontFamily()).toEqual([SINGLE_SOURCE]);
 	});
 
-	test('真源里定义了 --font-chalk，并且中文三个字体按 A→B→C 排', () => {
+	test('真源里定义了 --font-chalk，并且中文两个字体按 A→B 排', () => {
 		const layout = readFileSync(join(SRC_DIR, SINGLE_SOURCE), 'utf-8');
 		const declaration = layout.match(/--font-chalk:\s*([^;]+);/)?.[1] ?? '';
 
-		expect(declaration).toContain("'ZCOOL KuaiLe'");
 		expect(declaration).toContain("'LXGW WenKai'");
 		expect(declaration).toContain("'Ma Shan Zheng'");
-		expect(declaration.indexOf("'ZCOOL KuaiLe'")).toBeLessThan(declaration.indexOf("'LXGW WenKai'"));
 		expect(declaration.indexOf("'LXGW WenKai'")).toBeLessThan(declaration.indexOf("'Ma Shan Zheng'"));
 	});
 
-	test('日文的 Yusei Magic 已经出局 —— 站内没有假名，它只贡献日文字形和 1.1 MB', () => {
-		expect(readFileSync(join(SRC_DIR, SINGLE_SOURCE), 'utf-8')).not.toContain('Yusei');
+	test('出局的两个字体不再出现在真源里', () => {
+		const layout = readFileSync(join(SRC_DIR, SINGLE_SOURCE), 'utf-8');
+
+		// ZCOOL KuaiLe：本来排在第一，用户看过后拿掉了，链条整体前移
+		expect(layout).not.toContain('ZCOOL');
+		// Yusei Magic：日文字体，站内没有假名，只贡献日文字形和 1.1 MB
+		expect(layout).not.toContain('Yusei');
 	});
 });
