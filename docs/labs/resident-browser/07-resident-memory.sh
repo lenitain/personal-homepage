@@ -15,7 +15,7 @@
 #   A 空 profile，零窗口   —— 引擎本身的底价
 #   B 真实 profile，零窗口 —— 加上历史/书签/cookie 之后的底价
 #
-# 用法: ./03-resident-memory.sh [真实 profile 的路径]
+# 用法: ./07-resident-memory.sh [真实 profile 的路径]
 set -uo pipefail
 
 REAL_PROFILE="${1:-$HOME/.local/share/qutebrowser}"

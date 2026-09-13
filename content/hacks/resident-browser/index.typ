@@ -85,9 +85,9 @@ qutebrowser 启动要大约 1.2 秒。窗口先出来，然后页面才出来。
 
 = 5. 实验器材
 
-/ `01-namespace-failure-modes.sh`: PID namespace 的三个失败面
-/ `02-cgroup-vs-mainpid.sh`: scope 和 service 差在哪
-/ `03-resident-memory.sh`: 常驻到底占多少内存
+/ `05-namespace-failure-modes.sh`: PID namespace 的三个失败面
+/ `06-cgroup-vs-mainpid.sh`: scope 和 service 差在哪
+/ `07-resident-memory.sh`: 常驻到底占多少内存
 / `overflow-check.sh`: C 版缓冲区溢出的边界
 / `launchers/`: 九个实现，五种语言
 / `build-all.sh`: 全部构建 + 测量
