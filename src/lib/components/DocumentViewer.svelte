@@ -133,7 +133,9 @@
 				viewer: viewerSurface,
 				eventBus,
 				linkService,
-				findController
+				findController,
+				// 不要 pdf.js 那套「一张纸」的边：白白一圈衬在黑板前很跳
+				removePageBorders: true
 			});
 			linkService.setViewer(pdfViewer);
 
@@ -449,6 +451,9 @@
 		inset: 0;
 		overflow: auto;
 		background: var(--bg0);
+		/* pdf.js 给每页留了个白色纸底（`background-color: var(--page-bg-color, #fff)`），
+		   它在页面缩放的分数像素边缘会漏出一圈白线。这个变量就是留给使用方覆盖的。 */
+		--page-bg-color: transparent;
 	}
 
 	/* 粉笔颗粒按页套：整栏套会让大滚动区每帧重栅格化 */

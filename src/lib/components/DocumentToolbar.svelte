@@ -29,15 +29,18 @@
 </script>
 
 <div class="document-toolbar">
-	<input
-		class="search"
-		type="search"
-		bind:value={query}
-		onkeydown={handleSearchKeydown}
-		placeholder="find in document"
-		aria-label="在文档内查找"
-		spellcheck="false"
-	/>
+	<label class="search-field">
+		<span class="search-icon" aria-hidden="true">⌕</span>
+		<input
+			class="search"
+			type="search"
+			bind:value={query}
+			onkeydown={handleSearchKeydown}
+			placeholder="search"
+			aria-label="在文档内查找"
+			spellcheck="false"
+		/>
+	</label>
 	<span class="matches" aria-live="polite">{matchLabel}</span>
 
 	<span class="spacer"></span>
@@ -63,20 +66,41 @@
 		white-space: nowrap;
 	}
 
-	.search {
+	/* 做成一眼就能认出是输入框的样子：只有一条下划线的话，
+	   手写体会让它读起来像一句正文（踩过这个坑） */
+	.search-field {
+		display: flex;
+		align-items: center;
+		gap: 0.3em;
 		width: 14em;
 		min-width: 6em;
+		padding: 0 0.4em;
+		background: var(--bg2);
+		border: 1px solid var(--bg4);
+		border-radius: 2px;
+	}
+
+	.search-field:focus-within {
+		border-color: var(--blue);
+	}
+
+	.search-icon {
+		color: var(--grey1);
+		flex-shrink: 0;
+	}
+
+	.search {
+		flex: 1;
+		min-width: 0;
 		border: none;
-		border-bottom: 1px solid var(--bg4);
 		background: transparent;
 		color: var(--fg);
 		font: inherit;
-		padding: 0 0.2em;
+		padding: 0;
 	}
 
 	.search:focus {
 		outline: none;
-		border-bottom-color: var(--blue);
 	}
 
 	.search::placeholder {
