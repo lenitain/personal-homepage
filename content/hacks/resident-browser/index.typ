@@ -1,18 +1,38 @@
-#import ".course.typ": title
+#import ".course.typ": title, ask, lab, oops, note, punch, cols
 
-#set document(title: "起手：一个已经开着的浏览器")
+#set document(title: "一个已经开着的浏览器")
 
 #title[一个已经开着的浏览器]
 
--   qutebrowser 启动要大约 1.2 秒
--   窗口先出来，然后页面才出来
--   它不是个慢程序，但 1.2 秒足够让你每次都注意到 —— 一天二十次
+qutebrowser 启动要大约 1.2 秒。窗口先出来，然后页面才出来。它不是个慢程序，
+但 1.2 秒足够让你每次都注意到 —— 一天二十次。
 
-这门课记录的是把它压到 *232 毫秒*的全过程，以及*代价到底是什么*。
-
+这门课记录的是把它压到 *232 毫秒*的全过程，以及代价到底是什么。
 里面没有一处是在让浏览器本身变快。
 
-= 课程信息
+= 1. 这门课在教什么
+
+表面上是四章关于一个浏览器的笔记。实际上它反复在做同一件事：
+
+#punch[
+  拿到一个「顺手」的机制，然后问它原本是为哪个问题造的。
+]
+
+这件事之所以值得单独教，是因为*错的工具如果当场就报错，你会立刻换一个；
+它要是能用，你就会一直在它上面打补丁*。这门课里最贵的一个坑，
+就是一个「能用」的错工具 —— 我拿 PID namespace 去做进程回收，
+它确实能回收，代价是我的输入法没了，而且我花了一整章才想明白为什么。
+
+== 另一个反复出现的主题
+
+-   我凭印象写下的数字，量过之后*错了七倍*（第一章）
+-   我以为「多语言实现」的价值在对比表，实际价值在它抓出来的一个内存越界写（第四章）
+-   一个实验「跑通了」但其实完全无效，因为 `$$` 被 systemd 展开成了字面 `$`（第二章）
+
+这三个不是独立的事故，是同一种失误的三个变体：*用自己脑子里的模型代替观测*。
+所以每一章里凡是能跑的东西都跑了，输出直接贴在里面。
+
+= 2. 课程信息
 
 -   *形态*：四章，中文正文 + 英文术语，用 [typst](https://typst.app/) 写
 -   *前置知识*：会读 C，知道进程是什么，用过命令行
@@ -22,7 +42,7 @@
 -   *环境*：Linux + systemd + Wayland
     -   部分实验需要非特权 user namespace 可用
 
-= 章节目录
+= 3. 章节目录
 
 +   *什么样的程序值得常驻*
     -   为什么值得常驻的不是「慢的程序」，是「开销可分离的程序」
@@ -39,28 +59,23 @@
     -   量延迟、系统调用、地址空间、体积
     -   外加写它们时撞出来的一个缓冲区溢出
 
-= 怎么读
+= 4. 怎么读
 
-每一章尽量按同一个节奏走 —— *而这个节奏就是这门课真正想教的东西*：
-
--   先摆出*当时的问题*
--   然后是*我的猜测*，包括猜错的那种
--   接着是*一个可以照着跑的实验*，以及它跑出来的原始输出
--   然后看*哪里跟预期不一样*，以及为什么
--   最后才收成一条能带走的判断
+每一章尽量按同一个节奏走 —— 而这个节奏就是这门课真正想教的东西：
+先摆出*当时的问题*，然后是*我的猜测*（包括猜错的那种），
+接着是*一个可以照着跑的实验*和它的原始输出，然后看*哪里跟预期不一样*、
+为什么，最后才收成一条能带走的判断。
 
 所以你会看到很多「先停一下」，那是留给你自己先回答的。
 
-*请真的停一下。* 直接看答案的话，这门课就只剩下结论了，而结论是最不值钱的部分。
+#ask[
+  请真的停一下。直接看答案的话，这门课就只剩下结论了 —— 而结论是最不值钱的部分。
 
-== 为什么结论最不值钱
+  因为数字和实现会被更好的工具、更强的模型重新做一遍；
+  「为什么问这个问题、当时期待看到什么、被什么打脸、于是怎么改假设」不会。
+]
 
--   因为数字和实现会被更好的工具、更强的模型重新做一遍
--   而「为什么问这个问题、当时期待看到什么、被什么打脸、于是怎么改假设」不会
-
-*这门课想留下的是后者。*
-
-= 实验器材
+= 5. 实验器材
 
 / `01-namespace-failure-modes.sh`: PID namespace 的三个失败面
 / `02-cgroup-vs-mainpid.sh`: scope 和 service 差在哪
@@ -71,13 +86,11 @@
 
 两条使用须知，都是踩出来的：
 
--   *测量脚本要绑核*（`taskset`）
-    -   在一台开着桌面会话的机器上不绑核，同一份代码的读数能差一半
--   *`overflow-check.sh` 必须在 mount namespace 里跑*，它自己会做
-    -   那个 bug 的失败模式包含「`execve` 成功」这一种
-    -   直接跑会真的拉起你的浏览器
+-   *测量脚本要绑核*（`taskset`）—— 不绑核，同一份代码的读数能差一半
+-   *`overflow-check.sh` 必须在 mount namespace 里跑*，它自己会做 ——
+    那个 bug 的失败模式包含「`execve` 成功」这一种，直接跑会真的拉起你的浏览器
 
-= 结果
+= 6. 结果
 
 #table(
   columns: (1fr, auto, auto),
@@ -89,32 +102,24 @@
   [生命周期保证], [无], [pid 1 级],
 )
 
-一行版本：
-
-#quote(block: true)[
-把开销恒定的那部分保温，
-把它的生命周期交给一个本来就管生命周期的东西，
-把一切死的字节赶回磁盘。
+#punch[
+  把开销恒定的那部分保温，
+  把它的生命周期交给一个本来就管生命周期的东西，
+  把一切死的字节赶回磁盘。
 ]
 
-= 代码
+= 7. 代码
 
 全都在我的 dotfiles 里：
 
--   [qutebrowser 配置](https://github.com/lenitain/dotfiles/blob/main/dotfiles/.config/qutebrowser/config.py)
-    -   缓存相关的决定都写在注释里
--   [`qb-server`](https://github.com/lenitain/dotfiles/blob/main/dotfiles/.local/bin/scripts/qb-server)
-    -   打了补丁、零窗口也不退出的 qutebrowser
--   [`qb-open`](https://github.com/lenitain/dotfiles/blob/main/dotfiles/.local/bin/scripts/qb-open.c)
-    -   C 写的启动器，191 行
--   [`qb-server.service`](https://github.com/lenitain/dotfiles/blob/main/dotfiles/.config/systemd/user/qb-server.service)
-    -   交出去的生命周期
+-   [qutebrowser 配置](https://github.com/lenitain/dotfiles/blob/main/dotfiles/.config/qutebrowser/config.py) —— 缓存相关的决定都写在注释里
+-   [`qb-server`](https://github.com/lenitain/dotfiles/blob/main/dotfiles/.local/bin/scripts/qb-server) —— 打了补丁、零窗口也不退出的 qutebrowser
+-   [`qb-open`](https://github.com/lenitain/dotfiles/blob/main/dotfiles/.local/bin/scripts/qb-open.c) —— C 写的启动器，191 行
+-   [`qb-server.service`](https://github.com/lenitain/dotfiles/blob/main/dotfiles/.config/systemd/user/qb-server.service) —— 交出去的生命周期
 
-= 从哪开始
+= 8. 从哪开始
 
-如果只读一章，读*《谁来收尸》*。
-
--   那一章的实验最完整
--   而且它教的是一次*调试*，不是一个结论
+如果只读一章，读*《谁来收尸》*。那一章的实验最完整，
+而且它教的是一次*调试*，不是一个结论。
 
 否则就按左边文件树里的顺序往下走。

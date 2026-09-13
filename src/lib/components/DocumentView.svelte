@@ -368,6 +368,150 @@
 	}
 
 
+	/* ---- 课件版式：typst 交出结构，这里定长相与摆放 ---- */
+
+	/*
+	 * 这套规则的存在理由：typst 的 HTML 导出丢掉一切二维摆放，所以版面只能在
+	 * CSS 这一层做。反过来说，能做到的事一点不少 —— 内容侧用 `html.elem` 交出
+	 * 带 class 的结构（见 content/hacks/resident-browser/.course.typ），
+	 * 网格、分栏、重量差异全在这里实现。
+	 *
+	 * 按**重量**分档，而不是按颜色分类：提问比正文重、实验是中性的记录、
+	 * 结论落地、旁注比正文还轻。全是同等重量的彩色框会让读者去收集框而不是读内容。
+	 */
+
+	article :global(.c-box) {
+		background: var(--bg1);
+		border: 1px solid var(--bg4);
+		border-left-width: 3px;
+		padding: 0.6em 0.9em;
+		margin: 1em 0;
+		/* 框里的文字不一定经过 <p>，行高在这里补，否则比正文挤 */
+		line-height: 1.6;
+	}
+
+	article :global(.c-label) {
+		color: var(--grey2);
+		font-size: 0.82em;
+		letter-spacing: 0.08em;
+		margin: 0 0 0.4em;
+	}
+
+	/* 首个段落不再叠外边距，否则框内上头会空一块 */
+	article :global(.c-box > p) {
+		margin: 0;
+	}
+
+	/* 框内的后续块之间给点呼吸，但不撑开 */
+	article :global(.c-box > p + p),
+	article :global(.c-box > pre),
+	article :global(.c-box > ul),
+	article :global(.c-box > ol),
+	article :global(.c-box > table),
+	article :global(.c-box > .c-cols),
+	article :global(.c-box > .c-box) {
+		margin-top: 0.5em;
+	}
+
+	/* 提问：底色压暗一档，让它从正文里跳出来，但不带攻击性 */
+	article :global(.c-ask) {
+		background: var(--bg0);
+		border-left-color: var(--aqua);
+	}
+
+	article :global(.c-ask .c-label) {
+		color: var(--aqua);
+	}
+
+	/* 实验记录：中性的容器，重点是里面的原始输出 */
+	article :global(.c-lab) {
+		border-left-color: var(--yellow);
+	}
+
+	article :global(.c-lab .c-label) {
+		color: var(--yellow);
+	}
+
+	/* 实验框里的代码块是第二层框，压平一点免得嵌套太吵 */
+	article :global(.c-lab pre) {
+		background: var(--bg0);
+		border-color: var(--bg4);
+	}
+
+	/* 被推翻的判断：红色，但只有左边那条 */
+	article :global(.c-oops) {
+		border-left-color: var(--red);
+	}
+
+	article :global(.c-oops .c-label) {
+		color: var(--red);
+	}
+
+	/* 旁注：比正文还轻，可以跳过 */
+	article :global(.c-note) {
+		background: none;
+		border: none;
+		border-left: 2px dotted var(--grey1);
+		border-radius: 0;
+		color: var(--grey2);
+		font-size: 0.95em;
+		margin: 0.9em 0;
+	}
+
+	article :global(.c-note .c-label) {
+		color: var(--grey1);
+	}
+
+	/* 结论：上下划线夹住，居中；整章的落点 */
+	article :global(.c-punch) {
+		background: none;
+		border: none;
+		border-top: 1px solid var(--bg4);
+		border-bottom: 1px solid var(--bg4);
+		color: var(--green);
+		text-align: center;
+		padding: 0.8em 0.6em;
+		margin: 1.4em 0;
+	}
+
+	article :global(.c-punch > p) {
+		margin: 0;
+	}
+
+	/* 两栏对照：把「预期/实际」这类并排放，差别一看就出来 */
+	article :global(.c-cols) {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.8em;
+		margin: 1em 0;
+	}
+
+	article :global(.c-col) {
+		background: var(--bg1);
+		border: 1px solid var(--bg4);
+		padding: 0.55em 0.75em;
+		min-width: 0; /* 允许内容收缩，否则宽代码块会把网格撑破 */
+	}
+
+	article :global(.c-col > p:first-child) {
+		margin-top: 0;
+	}
+
+	article :global(.c-col > p:last-child) {
+		margin-bottom: 0;
+	}
+
+	/* 窄屏下两栏并排放不下，摊成一栏 */
+	@media (max-width: 640px) {
+		article :global(.c-cols) {
+			grid-template-columns: 1fr;
+		}
+
+		article :global(.c-box) {
+			padding: 0.5em 0.7em;
+		}
+	}
+
 	/* 窄屏下两栏并排放不下，摊成一栏 */
 	@media (max-width: 640px) {
 		article :global(.cv-columns) {
