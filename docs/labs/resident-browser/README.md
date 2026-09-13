@@ -18,11 +18,25 @@
 
 | 脚本 | 对应章节 | 干什么 |
 | --- | --- | --- |
+| `04-elf-loading.sh` | 一个进程是怎么起来的 | 段表与地址空间一一对应；execve 之后内核和链接器发的系统调用 |
+| `05-dynamic-loader.sh` | 一个进程是怎么起来的 | 找库 / 重映射 / 重定位 / 调 init；惰性绑定 vs `-z now` |
+| `06-zygote-prefork.sh` | 一个进程是怎么起来的 | fork 继承 vs exec 重来；真实 QtWebEngine zygote |
 | `01-namespace-failure-modes.sh` | 谁负责收尸 | 非特权建 PID namespace、空 uid_map、杀 wrapper |
 | `02-cgroup-vs-mainpid.sh` | 谁负责收尸 | scope 与 service 的 MainPID 差异；三种启动方式的收尸对比 |
 | `03-resident-memory.sh` | 什么该留在 RAM | 孤立实例量常驻成本（空 profile / 真实 profile / 在用的那个） |
 | `overflow-check.sh` | 快路径用什么写 | C 版缓冲区溢出的边界，安全网内 |
 | `launchers/` | 快路径用什么写 | 同一个启动器的九种实现、五种语言 |
+
+## 前三个脚本互相独立
+
+`04` / `05` / `06` 各自 `mktemp -d` 自己造素材、跑完自己删，不依赖仓库里任何东西，
+也不需要 root。直接跑就行：
+
+```sh
+./04-elf-loading.sh
+./05-dynamic-loader.sh
+./06-zygote-prefork.sh      # 最后一个会顺便读你机器上真实的 QtWebEngine 进程
+```
 
 ## 启动器基准的流程
 
