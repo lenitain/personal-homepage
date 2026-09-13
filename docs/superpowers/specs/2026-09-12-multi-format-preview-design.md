@@ -487,6 +487,7 @@ viewer 层与工具条是 DOM/Svelte 世界的东西，按既有约定不写单�
 | 7 | 顺带修掉的既有问题 | ① `+page.svelte` 的全局 keydown 不忽略输入框（打字会搅乱文件树，见正文）；② `FileTree.svelte` 的 `bind:this={rowElements[i]}` 绑到非响应式属性，Svelte 5 每次加载刷 8 条警告 —— 改成 `$state` 数组 |
 | 8 | 依赖 | `package.json` 里写着 `vitest` 但 `node_modules` 里**没装**，`npm run test` 原本跑不起来；已 `npm install` 补上，同时装 `pdfjs-dist@6.3.289` |
 | 9 | 验证手段 | 除 curl 外，用 `chromium --headless=new --remote-debugging-port` + CDP 脚本做了真实浏览器验证：截图、点文件树切文档、驱动搜索与缩放、收集未捕获异常。设计的验证清单里"必须真机/模拟器验"的项目，本次是用无头 Chromium 验的 |
+| 10 | **必须用 legacy 构建** | 第一版用了 `pdfjs-dist/build/pdf.mjs`（modern），在你的浏览器里报 `文档加载失败：this[#listeners].getOrInsertComputed is not a function` —— modern 构建直接用 `Map.prototype.getOrInsertComputed` 这类新 API，没有它整个文档打不开。改成 `legacy/build/pdf.mjs` + `legacy/build/pdf.worker.min.mjs`：里面带 core-js 补丁（含特性探测），代价约 +60KB 主包 / +50KB worker。我的无头 Chromium 是 152（已支持该 API）所以第一轮没暴露 —— 教训是**验证环境的浏览器版本也是变量**，复现办法见下 |
 
 验证结果（真实浏览器）：
 
@@ -499,6 +500,18 @@ viewer 层与工具条是 DOM/Svelte 世界的东西，按既有约定不写单�
 - 控制台干净：无未捕获异常、无警告
 
 **仍未验证的**：真机移动端（无头 Chromium 不等于 iOS Safari / Android Chrome）、`ctx.filter` 不可用时的 CSS 回退分支（Safari 路径）、多页文档的滚动与预取行为（样例只有 1 页）、`Ctrl+F` 在真实按键下的表现。
+
+**旧浏览器的复现办法**（第 10 条的验证手段，将来改 pdf.js 版本时要重跑）：
+
+```js
+// CDP: Page.addScriptToEvaluateOnNewDocument，必须在应用脚本之前执行
+delete Map.prototype.getOrInsertComputed;
+delete Map.prototype.getOrInsert;
+delete WeakMap.prototype.getOrInsertComputed;
+delete WeakMap.prototype.getOrInsert;
+```
+
+删完再加载页面并打开文档：modern 构建会报 `getOrInsertComputed is not a function`，legacy 构建能靠 core-js 补丁自愈（实测 `typeof Map.prototype.getOrInsertComputed` 会从 `undefined` 变回 `function`，画布正常渲染）。
 
 ## 风险
 

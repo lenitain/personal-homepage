@@ -1,11 +1,15 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+	// 用 legacy 构建：modern 构建直接用了 `Map.prototype.getOrInsertComputed` 这类新 API，
+	// 旧一点的浏览器（Safari、Firefox ESR 等）没有它，整个文档就打不开 —— 报
+	// "getOrInsertComputed is not a function"。legacy 里带 core-js 补丁，
+	// 代价只有约 +60KB 主包 / +50KB worker。
+	import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 	import DocumentToolbar from './DocumentToolbar.svelte';
 	import { CHALK_PALETTE } from '$lib/chalk-palette';
 	import { imageRectsFromOperatorList, type PageRect } from '$lib/pdf-image-rects';
 
-	type CoreModule = typeof import('pdfjs-dist');
+	type CoreModule = typeof import('pdfjs-dist/legacy/build/pdf.mjs');
 	type ViewerLayerModule = typeof import('pdfjs-dist/web/pdf_viewer.mjs');
 	type PdfJsViewer = InstanceType<ViewerLayerModule['PDFViewer']>;
 	type PdfEventBus = InstanceType<ViewerLayerModule['EventBus']>;
@@ -90,7 +94,7 @@
 			// viewer 层（web/pdf_viewer.mjs）是个独立 bundle，它从 `globalThis.pdfjsLib` 上
 			// 解构整套 API（源码里就是 `const {...} = globalThis.pdfjsLib`），所以必须先把
 			// 核心模块挂到全局，再 import 它 —— 反了就是 "AbortException of undefined"。
-			const core = await import('pdfjs-dist');
+			const core = await import('pdfjs-dist/legacy/build/pdf.mjs');
 			if (disposed) return;
 			(globalThis as unknown as { pdfjsLib: unknown }).pdfjsLib = core;
 
