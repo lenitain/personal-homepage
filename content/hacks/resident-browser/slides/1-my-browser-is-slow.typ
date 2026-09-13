@@ -1,4 +1,4 @@
-#import "../.course.typ": title, slide, punch, cols, note
+#import "../.course.typ": cols, note, punch, slide, title
 
 #set document(title: "我的 qutebrowser 启动好慢，我该怎么办？（讲义）")
 
@@ -11,25 +11,24 @@
 #slide[
   #title[我的 qutebrowser 启动好慢，我该怎么办？]
 
-  qutebrowser 启动要 1.2 秒。窗口先出来，等一会儿，页面才出来。
-  一天开二十次，每次都等这 1.2 秒。
+  qutebrowser 启动要 1.2 秒。一天开几十次，每次都等这 1.2 秒。
 
-  *慢在哪儿？*
+  *该从哪里入手呢？*
 ]
 
 #slide[
-  = 要拆它，先得知道「启动」是什么意思
+  = 「启动」是什么意思
 
-  但在动手拆之前，得先弄清楚一个更基础的问题：
+  在动手之前，得先弄清楚一个更基础的问题：
 
   *在 Linux 上「跑一个程序」到底是什么意思？*
 
-  这个问题听起来不用问。真往下追，会发现它跟我们的直觉不一样 ——
-  而这个「不一样」正好是后面所有事情的入口。
+  现存所有的 Unix 及类 Unix 操作系统内核 (Linux, MacOS, BSD, Plan9 ...)，都用相同的方式创建进程。
+  进程创建的过程是后面所有事情的入口。
 ]
 
 #slide[
-  = 直觉是一步，实际是两步
+  = 它不是一步，是两步
 
   直觉：敲一个命令，系统新建一个进程去跑它。
 
@@ -279,77 +278,95 @@
 ]
 
 #slide[
-  = 既然每次都一样，能不能只付一次
+  = 该拿这套机制去量什么了
 
-  同样的库、同样的重定位、同样的初始化顺序。
+  回到最初的问题：那 1.2 秒花在哪。
 
-  能 —— 但前提是*不要 exec 一个新进程*。
-
-  回忆第一步：`fork` 复制出来的子进程，拿到的是一份已经建好的地址空间的副本
-  （内核用写时复制，并不真的拷内存）。
-
-  库的映射、重定位的结果、初始化跑完的状态，*全都在里面了*。
+  量的是*普通的 qutebrowser* —— 从 shell 里敲的那个命令。全部外部观测，不动它一行代码。
 ]
 
 #slide[
-  = 两条路的差别：9.9 倍
-
-  造一个「很贵」的库（初始化要准备 8 MB 数据），各派生 40 次：
+  = 体检一：它不是一个二进制
 
   ```sh
-  A）父进程加载一次，之后全靠 fork
-      库的初始化跑了几遍: 1        总耗时:  19 ms
-
-  B）每次 exec 一个全新进程
-      库的初始化跑了几遍: 40       总耗时: 188 ms
+  $ file /usr/bin/qutebrowser
+  /usr/bin/qutebrowser: Python script, ASCII text executable
+  $ ls -l /usr/bin/qutebrowser
+  -rwxr-xr-x 1 root root 970  4月  4 00:40 /usr/bin/qutebrowser
+  $ head -1 /usr/bin/qutebrowser
+  #!/usr/bin/python3
   ```
+
+  970 字节的 Python 脚本。
+
+  这直接接上前面：shell 那次 `execve` 交出去的不是可执行程序，
+  内核要靠 shebang 再转一手 —— 跟 `PT_INTERP` 是同一个思路，
+  只不过这次要找的是 `python3`，不是动态链接器。
 ]
 
 #slide[
-  = 真实系统里就是这么做的
+  = 体检二：这一路上 exec 了什么
 
   ```sh
-  $ （列出所有 QtWebEngine 进程：pid / 父进程 / 类型）
-    1633    1357    zygote
-    1634    1357    zygote
-    1636    1634    zygote      ← 父进程是另一个 zygote
-    1689    1636    renderer    ← 父进程是 zygote
-    6151    1636    renderer
-    112935  1636    renderer
+  $ strace -f -e trace=execve qutebrowser --version
   ```
 
-  浏览器先启动「模板进程」，每个网页渲染器都从模板 fork 出来。
+  连 `--version` 这种「什么都不干」的调用，QtWebEngine 都会先起两个 zygote：
 
-  #note[打开一个新标签页，不需要把上面那一整套重新走一遍。]
+  ```sh
+  execve("/usr/lib/qt6/QtWebEngineProcess", ["--type=zygote", "--no-zygote-sandbox", …])
+  execve("/usr/lib/qt6/QtWebEngineProcess", ["--type=zygote", …])
+  ```
+
+  #note[这里有个陷阱：不清 PATH 直接跑，trace 里会出现几十条在 mise 各目录试探 uname/file 的记录 —— 全是测量环境的噪声。*测量环境本身也是变量。*]
 ]
 
 #slide[
-  = 证据不只是父子关系
+  = 体检三：Python 侧的账单
 
-  #cols[
-    *模板进程*
-    ```sh
-    1222 个内存区间
-    占用 65 MB
-    ```
-  ][
-    *渲染器*
-    ```sh
-    1358 个内存区间
-    占用 152 MB
-    ```
-  ]
+  ```sh
+  $ python3 -X importtime -c "import qutebrowser.qutebrowser"
+  ```
 
-  两者映射的库列表*完全一致* —— 渲染器一个库都没有自己加载过。
+  ```sh
+  累计      自身      模块
+  90.4 ms   0.9 ms   qutebrowser.qutebrowser
+  62.9 ms   0.9 ms   qutebrowser.misc.earlyinit
+  38.9 ms   2.2 ms   traceback
+  28.2 ms  10.4 ms   _colorize          ← 跟浏览器毫无关系
+  17.5 ms   0.4 ms   json
+  ```
 
-  #note[多占的内存是它跑起来之后的堆和即时编译的代码，不是加载新库的开销。]
+  *一共 109 个模块，光把它们导进来就要 90 毫秒。*
 ]
 
 #slide[
+  = 体检到此为止：还有一大段没量
+
+  上面三步只量到「解释器起来 + 模块导完」这一段。1.2 秒里还有：
+
+  + Qt 的初始化（`PyQt6` 是在主函数里才导入的）
+  + QtWebEngine 的初始化
+  + adblock 规则解析
+  + profile 装载
+  + 窗口创建
+
+  #note[现在还不能下任何关于「能不能拆开」的结论 —— 我们才刚看清这条链有几节。]
+]
+
+#slide[
+  = 现在知道什么，还不知道什么
+
+  *已知：* 一个程序从「文件」变成「跑起来的进程」，中间有一整套固定的流程；
+  qutebrowser 是这套流程的一个实例，它是个 Python 脚本，光导入模块就要 90 ms。
+
+  *未知：* Qt 初始化、QtWebEngine 初始化、adblock 解析、profile 装载、
+  窗口创建各花多少 —— 那 1.2 秒里究竟哪几段是每次一样的。
+
   #punch[
-    这一章只讲了一件事：一个程序从「文件」变成「跑起来的进程」，
-    中间有一整套固定的流程。
+    在量出「哪几段是恒定的」之前，
+    谈任何「能不能把这部分拆开、只付一次」都是空话。
   ]
 
-  下一章：什么样的程序值得为它把这套流程只付一次。
+  这件事是下一章要做的。
 ]
