@@ -1,6 +1,6 @@
 #import "../.course.typ": title, slide, punch, cols, note
 
-#set document(title: "一个进程是怎么起来的（讲义）")
+#set document(title: "我的 qutebrowser 启动好慢，我该怎么办？（讲义）")
 
 // 这一章是整门课的地基，所以从零开始：
 // 读者已知的唯一一件事是「qutebrowser 启动慢」。
@@ -9,21 +9,23 @@
 // 标题仍然是关于主题的断言，不是关于这次演讲的元评论。
 
 #slide[
-  #title[一个进程是怎么起来的]
+  #title[我的 qutebrowser 启动好慢，我该怎么办？]
 
-  qutebrowser 启动要 1.2 秒。这一章把它拆开。
+  qutebrowser 启动要 1.2 秒。窗口先出来，等一会儿，页面才出来。
+  一天开二十次，每次都等这 1.2 秒。
 
-  #note[完整版见 `1-how-a-process-starts.typ`。演示脚本 `docs/labs/resident-browser/01-04`。]
+  *慢在哪儿？*
 ]
 
 #slide[
-  = 要拆它，先得问一个更基础的问题
+  = 要拆它，先得知道「启动」是什么意思
 
-  *在 Linux 上「跑一个程序」是什么意思？*
+  但在动手拆之前，得先弄清楚一个更基础的问题：
 
-  这个问题听起来不用问。
+  *在 Linux 上「跑一个程序」到底是什么意思？*
 
-  但真往下追，会发现它跟我们平时的直觉不一样。
+  这个问题听起来不用问。真往下追，会发现它跟我们的直觉不一样 ——
+  而这个「不一样」正好是后面所有事情的入口。
 ]
 
 #slide[

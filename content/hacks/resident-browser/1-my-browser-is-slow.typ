@@ -2,16 +2,22 @@
 
 #set document(title: "一个进程是怎么起来的")
 
-#title[一个进程是怎么起来的]
+#title[我的 qutebrowser 启动好慢，我该怎么办？]
 
-qutebrowser 启动要 1.2 秒。窗口先出来，然后页面才出来。
+qutebrowser 启动要 1.2 秒。窗口先出来，等一会儿，页面才出来。一天开二十次，
+每次都等这 1.2 秒。
 
-这一章要做的，就是把这 1.2 秒拆开。
+慢在哪儿？要回答这个，最直接的做法是*把那 1.2 秒拆开看*。
 
-不过要拆它，得先回答一个更基础的问题：*在 Linux 上「跑一个程序」到底是什么意思？*
-这个问题听起来不用问，但真往下追，会发现它跟我们平时的直觉不一样。
+但「启动」这件事本身，比看上去要绕。所以在动手拆之前，得先弄清楚一个更基础的问题：
+*在 Linux 上「跑一个程序」到底是什么意思？*
 
-= 1. Linux 弄出一个新进程，是两步
+这个问题听起来不用问。真往下追，会发现它跟我们的直觉不一样 ——
+而这个「不一样」正好是后面所有事情的入口。
+
+= 1. 让我们看看一个进程的启动过程吧
+
+== Linux 弄出一个新进程，是两步
 
 如果你没想过这件事，直觉大概是这样：敲一个命令，系统就新建一个进程去跑它。一步。
 
@@ -19,7 +25,7 @@ qutebrowser 启动要 1.2 秒。窗口先出来，然后页面才出来。
 
 第一步叫 `fork`，第二步叫 `execve`。名字不用记，看它们做什么就行。
 
-== 第一步：复制
+=== 第一步：复制
 
 #lab("演示 01：fork 把一个进程变成两个")[
   ```c
@@ -44,7 +50,7 @@ qutebrowser 启动要 1.2 秒。窗口先出来，然后页面才出来。
   （完整脚本：`docs/labs/resident-browser/01-process-creation.sh`）
 ]
 
-== 第二步：换内容
+=== 第二步：换内容
 
 复制出来的那份，内容跟原来一模一样 —— 它还是 shell。所以还有第二步：
 把这个进程的内容，换成你真正想跑的那个程序。
@@ -64,7 +70,7 @@ qutebrowser 启动要 1.2 秒。窗口先出来，然后页面才出来。
   换成 `/bin/sh` 之前它是那个小程序，换完之后它是 sh —— 但始终是同一个进程。
 ]
 
-== 为什么要分成两步
+=== 为什么要分成两步
 
 一个很自然的问题是：既然要的是「跑一个新程序」，为什么不一步到位？
 
@@ -100,7 +106,7 @@ qutebrowser 启动要 1.2 秒。窗口先出来，然后页面才出来。
   留给你在「换内容」之前，先把环境布置好。
 ]
 
-== 回到我们的问题
+=== 回到我们的问题
 
 你在 shell 里敲下 `qutebrowser` 回车，shell 做的事就是：
 
@@ -116,7 +122,7 @@ execve()   把复制品的内容换成 qutebrowser
 
 要看清楚它，得先知道一个进程「里面」是什么样子。
 
-= 2. 一个进程里面有什么
+== 一个进程里面有什么
 
 一个运行中的进程，有一片属于它自己的内存。这片内存叫*地址空间*。
 
@@ -144,7 +150,7 @@ $ cat /proc/self/maps
 
 现在有了「地址空间」这个概念，就可以回答上一节留下的问题了。
 
-= 3. execve 拿到一个文件，怎么把它变成地址空间
+== execve 拿到一个文件，怎么把它变成地址空间
 
 `execve` 的输入是一个可执行文件。它要做的，是把这个文件的内容，
 按照某种安排放进新建的地址空间里。
@@ -195,7 +201,7 @@ $ cat /proc/self/maps
 
 但现代程序大多不是自足的。
 
-= 4. 很多程序自己跑不起来
+== 很多程序自己跑不起来
 
 你写一个程序，要用到「打印到屏幕」这个功能。这个功能不是你写的，是别人写好的，
 放在一个叫「库」的文件里。你的程序只写了「调用它」，没有把它的代码抄进来。
@@ -218,7 +224,7 @@ $ readelf -lW hello-dyn | grep -A1 INTERP
 
 那个解释器叫*动态链接器*。它的任务就是补上缺的那一块。
 
-= 5. 解释器做什么
+== 解释器做什么
 
 它的工作可以拆成四件事：
 
@@ -268,7 +274,111 @@ $ readelf -lW hello-dyn | grep -A1 INTERP
   （完整脚本：`docs/labs/resident-browser/03-dynamic-loader.sh`）
 ]
 
-= 6. 这套流程的账单
+= 2. 用这套机制给 qutebrowser 做体检
+
+现在手里有工具了。回到最初的问题：那 1.2 秒花在哪。
+
+体检的对象就是*普通的 qutebrowser* —— 从 shell 里敲的那个命令，不带任何修饰。
+全部只用外部观测，不动它一行代码。
+
+== 体检一：它到底是什么
+
+```sh
+$ file /usr/bin/qutebrowser
+/usr/bin/qutebrowser: Python script, ASCII text executable
+$ ls -l /usr/bin/qutebrowser
+-rwxr-xr-x 1 root root 970  4月  4 00:40 /usr/bin/qutebrowser
+$ head -2 /usr/bin/qutebrowser
+#!/usr/bin/python3
+# EASY-INSTALL-ENTRY-SCRIPT: 'qutebrowser==3.7.0','gui_scripts','qutebrowser'
+```
+
+*它不是一个二进制，是一个 970 字节的 Python 脚本。*
+
+这件事直接接上第 1 节：shell 那次 `execve` 交出去的文件，内核没法直接执行 ——
+它是一个 shebang 脚本。内核的处理方式和处理 `PT_INTERP` 是同一个思路：
+*不跑这个文件，去找它指定的那个程序来跑*。只不过这次要找的不是动态链接器，
+而是 `/usr/bin/python3`。
+
+== 体检二：这一路上 exec 了什么
+
+```sh
+$ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    strace -f -e trace=execve qutebrowser --version
+```
+
+去重之后，真正 exec 成功的程序只有四个：`qutebrowser`（脚本自身）、
+`ldconfig`、`uname`、`file`。另外还有两个*不是 exec 出来的*：
+
+```sh
+execve("/usr/lib/qt6/QtWebEngineProcess", ["--type=zygote", "--no-zygote-sandbox", …])
+execve("/usr/lib/qt6/QtWebEngineProcess", ["--type=zygote", …])
+```
+
+连 `qutebrowser --version` 这种「什么都不干」的调用，QtWebEngine 都会先起两个
+zygote 模板进程。第 1 节讲的「fork 继承地址空间」在这里第一次露出它为什么值钱。
+
+#note[
+  ⚠️ 这个体检里有个*方法论陷阱*，第一次量的时候我就被骗了。
+
+  不清 `PATH` 直接跑，trace 里会出现*几十条* `execve` —— 全都是在我的 mise 配置里
+  逐个 install 目录试探 `uname` / `file` 的记录，跟 qutebrowser 毫无关系。
+
+  也就是说：*测量环境本身也是变量。* 在把这类噪声清干净之前，
+  任何关于「启动花了多少时间」的数字都不可信。
+
+  还有一处我没查清：清掉 `PATH` 之后 `uname` / `file` / `ldconfig` 仍然出现，
+  而 qutebrowser 自己不该调用它们。来源没查明，先记在这里。
+]
+
+== 体检三：Python 侧的账单
+
+qutebrowser 的入口是 Python，所以先量它导入了什么。Python 自带一个开关：
+
+```sh
+$ python3 -X importtime -c "import qutebrowser.qutebrowser"
+```
+
+累计耗时最长的几项：
+
+#table(
+  columns: (auto, auto, 1fr),
+  table.header([累计], [自身], [模块]),
+  [90.4 ms], [0.9 ms], [`qutebrowser.qutebrowser`],
+  [62.9 ms], [0.9 ms], [`qutebrowser.misc.earlyinit`],
+  [38.9 ms], [2.2 ms], [`traceback`],
+  [28.2 ms], [*10.4 ms*], [`_colorize`],
+  [17.8 ms], [1.5 ms], [`dataclasses`],
+  [17.5 ms], [0.4 ms], [`json`],
+  [14.4 ms], [5.7 ms], [`inspect`],
+  [13.6 ms], [1.2 ms], [`re`],
+)
+
+*一共 109 个模块，光是把它们导进来就要 90 毫秒。* 而这里最费时的一项
+（`_colorize`，Python 3.14 给报错信息上色的模块）跟浏览器本身毫无关系 ——
+它只是被 `traceback` 顺带拖进来的。
+
+（完整脚本：`docs/labs/resident-browser/08-qutebrowser-checkup.sh`）
+
+== 体检到此为止：还有一大段没量
+
+上面三步量到的，只是「解释器起来 + 模块导完」这一段。而 1.2 秒里还有：
+
++   Qt 的初始化 —— `PyQt6` 是在主函数里才导入的，不在上面那份账单里
++   QtWebEngine 的初始化 —— 体检二已经看到它连 `--version` 都会起 zygote
++   adblock 规则解析
++   profile 装载
++   窗口创建
+
+这几段要接着量。
+
+#punch[
+  现在还不能下任何关于「能不能拆开」的结论 ——
+  我们才刚看清这条链有几节。
+]
+
+
+= 3. 这套流程的账单
 
 现在可以回到开头那个问题了：这 1.2 秒里，有多少是「程序还没开始跑就已经花掉」的？
 
@@ -308,7 +418,7 @@ Python 解释器和它的一大堆模块 —— 1.2 秒里，很大一块是这�
   所以映射一百个库和真的读一百个库，代价差很远。
 ]
 
-= 7. 既然每次都一样，能不能只付一次
+= 4. 一个自然的问题：能不能只付一次
 
 上面那一整套流程有个特点：*每次都完全一样。* 同样的库、同样的重定位、
 同样的初始化顺序。
@@ -341,7 +451,7 @@ Python 解释器和它的一大堆模块 —— 1.2 秒里，很大一块是这�
   （完整脚本：`docs/labs/resident-browser/04-zygote-prefork.sh`）
 ]
 
-== 真实系统里就是这么做的
+=== 真实系统里就是这么做的
 
 这不是什么偏门技巧。你现在开着的浏览器就在这么干 —— 直接读进程表就能看到：
 
@@ -378,7 +488,7 @@ $ （列出所有 QtWebEngine 进程：pid / 父进程 / 类型）
 两者映射的库列表*完全一致* —— 渲染器一个库都没有自己加载过。
 它多占的那些内存，是它自己跑起来之后的堆和即时编译出来的代码，不是加载新库的开销。
 
-= 8. 小结
+= 5. 小结
 
 +   Linux 弄出一个新进程是两步：`fork` 复制一份，`execve` 把内容换掉
 +   分成两步是为了留出中间那一步 —— shell 的重定向和管道都靠它
