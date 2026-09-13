@@ -5,7 +5,7 @@
 		readMarkdownFontScale,
 		resetMarkdownFontScale,
 		stepMarkdownFontScale
-	} from '$lib/markdown-font-scale';
+	} from '$lib/preview-zoom';
 
 	/**
 	 * markdown 视图：工具栏 + 正文。

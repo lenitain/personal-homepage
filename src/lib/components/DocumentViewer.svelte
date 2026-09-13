@@ -7,6 +7,7 @@
 	import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url';
 	import DocumentToolbar from './DocumentToolbar.svelte';
 	import { CHALK_PALETTE } from '$lib/chalk-palette';
+	import { readDocumentScaleValue, rememberDocumentScaleValue } from '$lib/preview-zoom';
 	import { imageRectsFromOperatorList, type PageRect } from '$lib/pdf-image-rects';
 
 	type CoreModule = typeof import('pdfjs-dist/legacy/build/pdf.mjs');
@@ -143,7 +144,9 @@
 			pageCount = pdfDocument.numPages;
 			eventBus.on('pagesinit', () => {
 				if (!pdfViewer) return;
-				pdfViewer.currentScaleValue = 'page-width';
+				// 复用上次的缩放（含「适应宽度」这个模式），换文件不会跳回默认。
+				// pdf.js 的类型只收 string，数字它内部 parseFloat，所以转一下。
+				pdfViewer.currentScaleValue = String(readDocumentScaleValue());
 				prefetchImageRects(1, pageCount);
 			});
 			eventBus.on('pagechanging', (event: { pageNumber: number }) => {
@@ -393,10 +396,13 @@
 		if (!pdfViewer) return;
 		if (direction === 'fit') {
 			pdfViewer.currentScaleValue = 'page-width';
+			rememberDocumentScaleValue('page-width');
 			return;
 		}
 		const current = pdfViewer.currentScale || 1;
-		pdfViewer.currentScale = direction === 'in' ? current * 1.2 : current / 1.2;
+		const next = direction === 'in' ? current * 1.2 : current / 1.2;
+		pdfViewer.currentScale = next;
+		rememberDocumentScaleValue(next);
 	}
 
 	interface PageRenderedEvent {

@@ -488,6 +488,8 @@ viewer 层与工具条是 DOM/Svelte 世界的东西，按既有约定不写单�
 | 8 | 依赖 | `package.json` 里写着 `vitest` 但 `node_modules` 里**没装**，`npm run test` 原本跑不起来；已 `npm install` 补上，同时装 `pdfjs-dist@6.3.289` |
 | 9 | 验证手段 | 除 curl 外，用 `chromium --headless=new --remote-debugging-port` + CDP 脚本做了真实浏览器验证：截图、点文件树切文档、驱动搜索与缩放、收集未捕获异常。设计的验证清单里"必须真机/模拟器验"的项目，本次是用无头 Chromium 验的 |
 | 10 | **必须用 legacy 构建** | 第一版用了 `pdfjs-dist/build/pdf.mjs`（modern），在你的浏览器里报 `文档加载失败：this[#listeners].getOrInsertComputed is not a function` —— modern 构建直接用 `Map.prototype.getOrInsertComputed` 这类新 API，没有它整个文档打不开。改成 `legacy/build/pdf.mjs` + `legacy/build/pdf.worker.min.mjs`：里面带 core-js 补丁（含特性探测），代价约 +60KB 主包 / +50KB worker。我的无头 Chromium 是 152（已支持该 API）所以第一轮没暴露 —— 教训是**验证环境的浏览器版本也是变量**，复现办法见下 |
+| 11 | 工具栏对三种格式一视同仁 | 工具栏原先长在 `DocumentViewer` 里，markdown 没有。改成三格式共用同一个 `DocumentToolbar`：markdown 走新增的 `MarkdownView.svelte`（自己实现 DOM 内查找 + 调字号），typst/pdf 仍走 `DocumentViewer`。markdown 没有「页」，所以页码位不渲染；`⤢` 换成 `↺`（前者读起来像「放大」），按钮含义随格式变 |
+| 12 | 缩放状态的生命周期 | 新增 `src/lib/preview-zoom.ts`：markdown 字号与 pdf/typst 缩放都存模块作用域，**一次页面访问内**换文件、切格式都保留，刷新或关标签页即复位。纯内存，不落 localStorage、不上服务端 —— 与文件树展开状态同口径。此前 pdf 那侧每次挂载都把 `currentScaleValue` 设回 `page-width`，换文件即丢，属于不一致 |
 
 验证结果（真实浏览器）：
 
