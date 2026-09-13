@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { slide } from 'svelte/transition';
 	import { SvelteSet } from 'svelte/reactivity';
 	import ChalkFilter from '$lib/components/ChalkFilter.svelte';
@@ -9,6 +9,12 @@
 	import { findFileTreeEntry, flattenFileTree } from '$lib/file-tree';
 	import { isPresenting } from '$lib/presentation';
 	import { isTextEntryTarget } from '$lib/text-entry';
+	import {
+		browseStateOf,
+		browseStateToSearch,
+		parseBrowseState,
+		resolveBrowseState
+	} from '$lib/browse-state';
 	import type { FsEntry } from '$lib/types';
 
 	let { data } = $props();
@@ -27,13 +33,22 @@
 
 	const tree = $derived(data.tree);
 
-	/** 展开了哪些目录。空集合 = 全部折叠，这就是首屏的样子。 */
-	const expandedPaths = new SvelteSet<string>();
+	/**
+	 * 展开了哪些目录。首屏这份来自地址栏（`data.initialExpanded`）—— 刷新前开着的文件夹，
+	 * 刷新后还是开着的。空集合 = 全部折叠。
+	 *
+	 * `untrack` 是给编译器看的：这里**故意**只取一次初始值，之后这份集合由点击和
+	 * 后退/前进改，不该再跟着 props 变。
+	 */
+	const expandedPaths = new SvelteSet<string>(untrack(() => data.initialExpanded));
 	/** 光标：键盘现在停在哪一行。跟右栏显示哪一篇是两件事。 */
 	let cursorPath = $state<string | null>(null);
-	/** 访客自己点开的那一篇；还没点过就跟着页面数据给的默认文档走。 */
-	let chosenPath = $state<string | null>(null);
-	let openPath = $derived(chosenPath ?? data.initialPath);
+	/**
+	 * 地址栏指名的那一篇。真相来源是 URL，不是组件内存 —— 点击只是改 URL，右栏跟着走。
+	 * 这一份是服务端按树校验过的；URL 什么都没说时是 null。同上的「只取一次」。
+	 */
+	let urlFile = $state<string | null>(untrack(() => data.restoredFile));
+	let openPath = $derived(urlFile ?? data.defaultPath);
 	/** 左侧整栏是否展开。 */
 	let sidebarOpen = $state(true);
 	/**
@@ -57,17 +72,57 @@
 		sidebarOpen = !sidebarOpen;
 	}
 
+	/**
+	 * 把当前浏览位置写回地址栏。
+	 *
+	 * 点开一篇文档 = `pushState`：「去了一个地方」，后退键该回到上一篇。
+	 * 开合目录 = `replaceState`：那是视图偏好，不该往历史里塞记录 —— 否则点开五个文件夹、
+	 * 再想后退回上一篇文章，得按七次。
+	 *
+	 * 用原生 History API，而不是 `$app/navigation` 的同名函数：SvelteKit 的 `pushState`
+	 * 只写 `history.state`，不更新 `page.url`，而且那份 state 刷新后不会被应用（官方文档
+	 * Shallow routing → Caveats 明说）。这里要的恰恰是地址栏本身 —— 直接改地址栏，它就
+	 * 是那份持久化存储。我们插进去的记录不带 SvelteKit 的记账，它的路由器会走 popstate
+	 * 的兜底分支，不会为此重跑 `load`（正文是整体内联的，重跑一次就是重传整站内容）。
+	 */
+	function syncUrl(createHistoryEntry: boolean) {
+		const url = `${location.pathname}${browseStateToSearch(browseStateOf(urlFile, expandedPaths))}`;
+		if (url === `${location.pathname}${location.search}`) return;
+
+		if (createHistoryEntry) history.pushState(null, '', url);
+		else history.replaceState(null, '', url);
+	}
+
+	/** 整份换掉展开集合 —— 后退/前进要复原的是「那时开着哪些文件夹」，不是增量。 */
+	function replaceExpanded(paths: string[]) {
+		expandedPaths.clear();
+		for (const path of paths) expandedPaths.add(path);
+
+		// 光标不能悬在一个刚被收起来、已经看不见的节点上（同 toggleDirectory）
+		if (cursorPath && !rows.some((row) => row.entry.path === cursorPath)) {
+			cursorPath = null;
+		}
+	}
+
+	/** 后退 / 前进。读 `location.search` 而不是 `page.url`：我们自己插的历史记录不带框架的记账。 */
+	function handlePopstate() {
+		const restored = resolveBrowseState(tree, parseBrowseState(location.search));
+		urlFile = restored.file;
+		replaceExpanded(restored.expanded);
+	}
+
 	function toggleDirectory(entry: FsEntry) {
 		if (!expandedPaths.has(entry.path)) {
 			expandedPaths.add(entry.path);
-			return;
+		} else {
+			expandedPaths.delete(entry.path);
+			// 光标不能悬在一个刚被收起、已经看不见的节点上
+			if (cursorPath?.startsWith(`${entry.path}/`)) {
+				cursorPath = entry.path;
+			}
 		}
 
-		expandedPaths.delete(entry.path);
-		// 光标不能悬在一个刚被收起、已经看不见的节点上
-		if (cursorPath?.startsWith(`${entry.path}/`)) {
-			cursorPath = entry.path;
-		}
+		syncUrl(false);
 	}
 
 	/** 单击一行：目录就展开/收起，文件就打开。两种情况都把光标带过去。 */
@@ -75,11 +130,13 @@
 		cursorPath = entry.path;
 		if (entry.type === 'dir') {
 			toggleDirectory(entry);
-		} else {
-			chosenPath = entry.path;
-			// 窄屏下树是浮层：选完文章就收起来，不然文章还被盖着
-			if (narrowViewport) sidebarOpen = false;
+			return;
 		}
+
+		urlFile = entry.path;
+		// 窄屏下树是浮层：选完文章就收起来，不然文章还被盖着
+		if (narrowViewport) sidebarOpen = false;
+		syncUrl(true);
 	}
 
 	function moveCursor(step: number) {
@@ -142,10 +199,19 @@
 
 		narrow.addEventListener('change', handleViewportChange);
 		document.addEventListener('keydown', handleKeydown);
+		window.addEventListener('popstate', handlePopstate);
+
+		/*
+		 * 地址栏规范化：把失效的 file=、树里没有的 dirs=、重复项、参数顺序一次性理顺，
+		 * 于是访客不会停在 `/?file=已删除.md&dirs=不存在` 这种地址上。走 replaceState，
+		 * 不留一条脏历史记录。
+		 */
+		syncUrl(false);
 
 		return () => {
 			narrow.removeEventListener('change', handleViewportChange);
 			document.removeEventListener('keydown', handleKeydown);
+			window.removeEventListener('popstate', handlePopstate);
 		};
 	});
 </script>
