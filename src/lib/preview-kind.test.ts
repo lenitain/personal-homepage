@@ -2,16 +2,14 @@ import { describe, expect, test } from 'vitest';
 import { previewKindOf } from './preview-kind';
 
 describe('previewKindOf', () => {
-	test('三种可预览的扩展名各自映射到一种类型', () => {
+	test('两种可预览的扩展名各自映射到一种类型', () => {
 		expect(previewKindOf('readme.md')).toBe('markdown');
 		expect(previewKindOf('cv.typ')).toBe('typst');
-		expect(previewKindOf('cv.pdf')).toBe('pdf');
 	});
 
 	test('扩展名比较不看大小写', () => {
 		expect(previewKindOf('README.MD')).toBe('markdown');
 		expect(previewKindOf('CV.Typ')).toBe('typst');
-		expect(previewKindOf('CV.PDF')).toBe('pdf');
 	});
 
 	test('多点文件名取最后一个点', () => {
@@ -24,11 +22,15 @@ describe('previewKindOf', () => {
 		expect(previewKindOf('Makefile')).toBeNull();
 	});
 
+	test('pdf 不再是可预览类型 —— 站点只认能变成 HTML 的源文本', () => {
+		expect(previewKindOf('cv.pdf')).toBeNull();
+		expect(previewKindOf('CV.PDF')).toBeNull();
+	});
+
 	test('像但不相等的扩展名不算', () => {
 		expect(previewKindOf('notes.mdx')).toBeNull();
 		expect(previewKindOf('notes.markdown')).toBeNull();
 		expect(previewKindOf('paper.typst')).toBeNull();
-		expect(previewKindOf('scan.pdf.txt')).toBeNull();
 	});
 
 	test('点后面什么都没有不算', () => {

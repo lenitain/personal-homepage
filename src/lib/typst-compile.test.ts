@@ -1,35 +1,30 @@
 import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readdir, rm, utimes, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { compileTypstDocument } from './typst-compile';
+import { renderTypstDocument } from './typst-compile';
 
 /**
  * 这些用例真调本机的 typst。没装 typst 的机器上整组跳过，而不是整片挂掉。
  *
- * 这里不验「粉笔主题有没有生效」—— 那要看像素，属于手点验证（spec 的验证清单）；
- * 单测只锁定编译产物、诊断清洗、wrapper 清理、缓存失效这几件能稳定断言的事。
+ * 这里锁的是**结构输出**：正文片段、语义标签、按目标分流的摆放，以及诊断的清洗。
+ * 「粉笔风格长什么样」不在这里 —— 那是站点样式表的事，由手点验证。
  */
 const hasTypst = spawnSync('typst', ['--version']).status === 0;
 
-/** 一页正文 + 一个被 include 的片段 + 第二页，够验「多页」和「依赖失效」。 */
 const DOCUMENT_SOURCE = [
 	'= Preview Test',
 	'',
 	'Body text',
 	'',
-	'#include "partial.typ"',
-	'',
-	'#pagebreak()',
-	'',
-	'= Second Page'
+	'#include "partial.typ"'
 ].join('\n');
 
 let contentDir: string;
 
 beforeEach(async () => {
-	contentDir = await mkdtemp(join(tmpdir(), 'typst-compile-'));
+	contentDir = await mkdtemp(join(tmpdir(), 'typst-render-'));
 });
 
 afterEach(async () => {
@@ -43,100 +38,115 @@ async function writeFixture(relativePath: string, body: string): Promise<string>
 	return fullPath;
 }
 
-/** 造一份可编译的文档，返回它的相对路径。 */
-async function writeDocument(relativePath = 'cv.typ'): Promise<string> {
-	await writeFixture('partial.typ', 'Partial content\n');
-	await writeFixture(relativePath, DOCUMENT_SOURCE);
-	return relativePath;
-}
+describe.skipIf(!hasTypst)('renderTypstDocument', () => {
+	test('渲染成功返回正文片段，不带 html / head / body 外壳', async () => {
+		await writeFixture('partial.typ', 'Partial content\n');
+		await writeFixture('cv.typ', DOCUMENT_SOURCE);
 
-/** 把 mtime 推到过去，免得同毫秒内的两次写入看起来一样。 */
-async function ageFile(fullPath: string, secondsAgo: number): Promise<void> {
-	const when = new Date(Date.now() - secondsAgo * 1000);
-	await utimes(fullPath, when, when);
-}
-describe.skipIf(!hasTypst)('compileTypstDocument', () => {
-	test('编译成功返回以 %PDF 开头的非空 Buffer', async () => {
-		const documentPath = await writeDocument();
-
-		const result = await compileTypstDocument({ contentDir, documentPath });
+		const result = await renderTypstDocument({ contentDir, documentPath: 'cv.typ' });
 
 		expect(result.ok).toBe(true);
 		if (!result.ok) return;
-		expect(result.pdf.subarray(0, 5).toString('latin1')).toBe('%PDF-');
-		expect(result.pdf.byteLength).toBeGreaterThan(1000);
+		expect(result.html).toContain('<h2>Preview Test</h2>');
+		expect(result.html).toContain('Partial content');
+		// 外壳归本站管，文档不许带出来
+		expect(result.html).not.toContain('<html');
+		expect(result.html).not.toContain('<body');
+		expect(result.html).not.toContain('<head');
 	});
 
-	test('编译完把 wrapper 删干净，目录里不留隐藏文件', async () => {
-		const documentPath = await writeDocument();
+	test('标题、列表、表格、strong 都保留成语义标签', async () => {
+		await writeFixture(
+			'cv.typ',
+			['= H', '', '- *bold* item', '', '#table(columns: 2, [a], [b])'].join('\n')
+		);
 
-		await compileTypstDocument({ contentDir, documentPath });
+		const result = await renderTypstDocument({ contentDir, documentPath: 'cv.typ' });
 
-		const names = await readdir(contentDir);
-		expect(names.filter((name) => name.startsWith('.preview-'))).toEqual([]);
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.html).toContain('<h2>H</h2>');
+		expect(result.html).toContain('<ul>');
+		expect(result.html).toContain('<strong>bold</strong>');
+		expect(result.html).toContain('<table>');
 	});
 
-	test('语法错误返回诊断，且诊断里不出现 wrapper 的临时文件名', async () => {
+	test('按导出目标分流：html 目标下拿到 div.cv-columns，而不是 code', async () => {
+		await writeFixture(
+			'cv.typ',
+			[
+				'#let site-columns(..body) = context {',
+				'  if target() == "html" {',
+				'    html.elem("div", body.pos().join(), attrs: (class: "cv-columns"))',
+				'  } else {',
+				'    grid(columns: (1fr, 2fr), ..body.pos())',
+				'  }',
+				'}',
+				'#site-columns([LEFT], [RIGHT])'
+			].join('\n')
+		);
+
+		const result = await renderTypstDocument({ contentDir, documentPath: 'cv.typ' });
+
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.html).toContain('<div class="cv-columns">');
+		expect(result.html).toContain('LEFT');
+		expect(result.html).toContain('RIGHT');
+		// 曾经的坑：把内容数组直接交给 html.elem，整个数组会被渲染成 <code>
+		expect(result.html).not.toContain('<code');
+	});
+
+	test('分隔线：官方 divider 在 HTML 目标下就是 <hr>，两种格式共用一条样式', async () => {
+		await writeFixture('cv.typ', '= Before\n\n#divider()\n\n= After\n');
+
+		const result = await renderTypstDocument({ contentDir, documentPath: 'cv.typ' });
+
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.html).toContain('<hr>');
+	});
+
+	test('每次都会出现的实验特性总提示不进诊断，用户不该看见它', async () => {
+		await writeFixture('cv.typ', '= Hi\n');
+
+		const result = await renderTypstDocument({ contentDir, documentPath: 'cv.typ' });
+
+		expect(result.ok).toBe(true);
+		if (!result.ok) return;
+		expect(result.diagnostics.join('\n')).not.toContain('under active development');
+	});
+
+	test('语法错误返回带源位置的诊断，且诊断里有文件名', async () => {
 		await writeFixture('broken.typ', '= Hi\n#let x = \n');
 
-		const result = await compileTypstDocument({ contentDir, documentPath: 'broken.typ' });
+		const result = await renderTypstDocument({ contentDir, documentPath: 'broken.typ' });
 
 		expect(result.ok).toBe(false);
 		if (result.ok) return;
-		expect(result.diagnostics.join('\n')).toContain('broken.typ:2:8');
-		expect(result.diagnostics.join('\n')).not.toContain('.preview-');
-		// 编译失败也要把 wrapper 收干净
-		expect((await readdir(contentDir)).filter((name) => name.startsWith('.preview-'))).toEqual([]);
+		expect(result.diagnostics.join('\n')).toContain('broken.typ:2');
 	});
 
-	test('第二次调用命中缓存：返回同一个 Buffer，不重新编译', async () => {
-		const documentPath = await writeDocument();
-
-		const first = await compileTypstDocument({ contentDir, documentPath });
-		const second = await compileTypstDocument({ contentDir, documentPath });
-
-		expect(first.ok && second.ok).toBe(true);
-		if (!first.ok || !second.ok) return;
-		expect(second.pdf).toBe(first.pdf);
-		expect(second.hash).toBe(first.hash);
-	});
-
-	test('被 include 的片段改了，缓存失效并重新编译', async () => {
-		const documentPath = await writeDocument();
-
-		const first = await compileTypstDocument({ contentDir, documentPath });
-		const partialPath = join(contentDir, 'partial.typ');
-		await writeFixture('partial.typ', 'Partial content changed\n');
-		await ageFile(partialPath, 60); // 明确改掉 mtime，绕开毫秒精度
-
-		const second = await compileTypstDocument({ contentDir, documentPath });
-
-		expect(first.ok && second.ok).toBe(true);
-		if (!first.ok || !second.ok) return;
-		expect(second.hash).not.toBe(first.hash);
-		expect(second.pdf).not.toBe(first.pdf);
-	});
-
-	test('文档自身改了，缓存同样失效', async () => {
-		const documentPath = await writeDocument();
-
-		const first = await compileTypstDocument({ contentDir, documentPath });
-		await writeFixture(documentPath, `${DOCUMENT_SOURCE}\n\nAppended line\n`);
-		await ageFile(join(contentDir, documentPath), 60);
-
-		const second = await compileTypstDocument({ contentDir, documentPath });
-
-		expect(first.ok && second.ok).toBe(true);
-		if (!first.ok || !second.ok) return;
-		expect(second.hash).not.toBe(first.hash);
-	});
-
-	test('依赖文件不见了也能收场：报编译失败，不抛异常', async () => {
-		await writeDocument();
+	test('依赖文件不见了也收场：报渲染失败，不抛异常', async () => {
+		await writeFixture('partial.typ', 'Partial\n');
+		await writeFixture('cv.typ', DOCUMENT_SOURCE);
 		await rm(join(contentDir, 'partial.typ'));
 
-		const result = await compileTypstDocument({ contentDir, documentPath: 'cv.typ' });
+		const result = await renderTypstDocument({ contentDir, documentPath: 'cv.typ' });
 
 		expect(result.ok).toBe(false);
+	});
+
+	test('改了源文件下次渲染就是新内容 —— 没有缓存要失效', async () => {
+		await writeFixture('cv.typ', '= First\n');
+
+		const first = await renderTypstDocument({ contentDir, documentPath: 'cv.typ' });
+		await writeFixture('cv.typ', '= Second\n');
+		const second = await renderTypstDocument({ contentDir, documentPath: 'cv.typ' });
+
+		expect(first.ok && second.ok).toBe(true);
+		if (!first.ok || !second.ok) return;
+		expect(first.html).toContain('First');
+		expect(second.html).toContain('Second');
 	});
 });

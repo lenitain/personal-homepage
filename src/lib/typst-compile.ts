@@ -1,114 +1,69 @@
 import { execFile } from 'node:child_process';
-import { createHash, randomUUID } from 'node:crypto';
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { basename, dirname, join } from 'node:path';
-import { CHALK_PALETTE } from './chalk-palette';
 
-/** 编译超时。文档若用 @preview 包，首次编译要联网下载，10 秒是够的；超了按失败上报。 */
-const COMPILE_TIMEOUT_MS = 10_000;
+/** 渲染超时。HTML 导出没有排版和字体嵌入，正常是几毫秒，留足余量给首次调用。 */
+const RENDER_TIMEOUT_MS = 10_000;
 
-/** 编译缓存的总字节上限，超了按插入顺序淘汰最旧的。 */
-const CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
-
-/**
- * 注入主题的 wrapper 文件名前缀。
- *
- * 点号开头 ⇒ 文件树会跳过它；记录依赖时也要按这个前缀把它自己滤掉，否则它会因为
- * 「编译完就被删了」让缓存永远无法命中。
- */
-const PREVIEW_WRAPPER_PREFIX = '.preview-';
-
-/** 站点主题色，来自共用的调色板模块（改色要同时改 `+layout.svelte` 的 CSS 变量）。 */
-const TYPST_THEME_PREAMBLE = `#set page(fill: rgb("${CHALK_PALETTE.board}"))
-#set text(fill: rgb("${CHALK_PALETTE.ink}"))
-#show link: set text(fill: rgb("${CHALK_PALETTE.link}"))
-#show raw:  set text(fill: rgb("${CHALK_PALETTE.code}"))`;
-
-export type TypstCompileResult =
-	| { ok: true; pdf: Buffer; hash: string }
+export type TypstRenderResult =
+	| { ok: true; html: string; diagnostics: string[] }
 	| { ok: false; diagnostics: string[] };
 
-export interface TypstCompileRequest {
+export interface TypstRenderRequest {
 	/** content/ 的绝对路径。 */
 	contentDir: string;
 	/** 相对 content/ 的 .typ 路径，例如 `cv.typ` 或 `about/cv.typ`。 */
 	documentPath: string;
 }
 
-interface CompileCacheEntry {
-	hash: string;
-	/** 上次编译真实读过的文件，相对 content/。wrapper 已滤掉。 */
-	inputs: string[];
-	pdf: Buffer;
-}
-
-const compileCache = new Map<string, CompileCacheEntry>();
-let cacheBytes = 0;
-
 /**
- * 编译 typst 文档 —— 把一篇 .typ 编译成带站点粉笔主题的 pdf。
+ * 把一篇 .typ 渲染成 HTML 片段，供右栏直接当正文显示。
  *
- * 主题靠一个临时 wrapper 注入（`#set page(fill:)` / `#set text(fill:)` 等），
- * wrapper 必须与文档同目录，这样文档里的相对 `#include`、`#image` 才按原样解析；
- * 编译完在 finally 里删掉。产物缓存在内存里，缓存键是 typst `--deps` 报出来的
- * 真实依赖文件的 mtime + size，所以改文档或改它 include 的片段都会失效。
+ * 关键取舍：**输出走 HTML 而不是 PDF**。typst 的两种导出意图完全不同 ——
+ * HTML 导出交出**结构**（标题、列表、表格、图片、链接、行内标记），丢弃二维摆放
+ * （grid / place / align / stack / rect / line / columns / v）；PDF 导出交出**视觉**，
+ * 什么都能摆，但没有语义，浏览器不认，得靠一整套 pdf.js 才能显示。
  *
- * 失败不抛异常，返回原始诊断（一行式、已把 wrapper 文件名换回文档名），交给路由变成 422。
+ * 本站是网页，正文最终一定是 HTML，所以选结构。代价是摆放要按导出目标分流
+ * （见 content/cv.typ 里的 `site-columns`），收益是：正文是可选、可搜、可重排的真
+ * 文本，粉笔风格由站点样式表统一施加，不需要任何画布后处理。
+ *
+ * 不缓存：实测渲染 ~6ms，比读一遍源文件还便宜，而调用方（readContentTree）本来
+ * 就是每次请求都跑、每次都读全部 markdown 源文件。缓存只会带来失效逻辑的复杂度。
+ *
+ * 失败不抛异常，返回原始诊断（一行式、带源位置），交给调用方决定怎么显示。
  */
-export async function compileTypstDocument(
-	request: TypstCompileRequest
-): Promise<TypstCompileResult> {
+export async function renderTypstDocument(
+	request: TypstRenderRequest
+): Promise<TypstRenderResult> {
 	const { contentDir, documentPath } = request;
-	const absolutePath = join(contentDir, documentPath);
-
-	const cached = compileCache.get(absolutePath);
-	if (cached && (await inputsStillMatch(contentDir, documentPath, cached.inputs, cached.hash))) {
-		return { ok: true, pdf: cached.pdf, hash: cached.hash };
-	}
-
-	const workDir = await mkdtemp(join(tmpdir(), 'typst-preview-'));
-	const wrapperName = `${PREVIEW_WRAPPER_PREFIX}${randomUUID()}.typ`;
-	const wrapperPath = join(dirname(absolutePath), wrapperName);
-	const wrapperRelativePath = join(dirname(documentPath), wrapperName);
 
 	try {
-		await writeFile(
-			wrapperPath,
-			`${TYPST_THEME_PREAMBLE}\n#include "${basename(documentPath)}"\n`,
-			'utf-8'
-		);
-
-		const depsPath = join(workDir, 'deps.json');
-		const outputPath = join(workDir, 'out.pdf');
-		await runTypst(
+		// 输出到 stdout（`-`）：HTML 导出不需要落盘，也就不用临时目录。
+		const { stdout, stderr } = await runTypst(
 			[
 				'compile',
+				'--features',
+				'html',
 				'--format',
-				'pdf',
+				'html',
 				'--root',
 				'.',
-				'--deps',
-				depsPath,
 				'--diagnostic-format',
 				'short',
-				wrapperRelativePath,
-				outputPath
+				documentPath,
+				'-'
 			],
 			contentDir
 		);
 
-		const pdf = await readFile(outputPath);
-		const inputs = await readDependencyInputs(depsPath);
-		const hash = await hashInputFiles(contentDir, documentPath, inputs);
-		rememberCompilation(absolutePath, { hash, inputs, pdf });
-
-		return { ok: true, pdf, hash };
+		return {
+			ok: true,
+			html: extractBody(stdout),
+			// HTML 导出目前是实验特性，每次都会报一条总提示。它是既知的、无法消除的，
+			// 不该出现在用户眼前，所以滤掉；其余诊断照常上报。
+			diagnostics: cleanDiagnostics(stderr)
+		};
 	} catch (error) {
-		return { ok: false, diagnostics: describeCompileFailure(error, wrapperName, documentPath) };
-	} finally {
-		await rm(wrapperPath, { force: true });
-		await rm(workDir, { recursive: true, force: true });
+		return { ok: false, diagnostics: describeFailure(error) };
 	}
 }
 
@@ -118,7 +73,7 @@ function runTypst(args: string[], cwd: string): Promise<{ stdout: string; stderr
 		execFile(
 			'typst',
 			args,
-			{ cwd, timeout: COMPILE_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024 },
+			{ cwd, timeout: RENDER_TIMEOUT_MS, maxBuffer: 32 * 1024 * 1024 },
 			(error, stdout, stderr) => {
 				if (error) {
 					rejectPromise(Object.assign(error, { stdout, stderr }));
@@ -130,86 +85,40 @@ function runTypst(args: string[], cwd: string): Promise<{ stdout: string; stderr
 	});
 }
 
-/** 读 `--deps` 写出来的依赖清单，滤掉 wrapper 自己；读不到就返回空数组（等价于永不命中缓存）。 */
-async function readDependencyInputs(depsPath: string): Promise<string[]> {
-	const raw = await readFile(depsPath, 'utf-8').catch(() => '');
-	try {
-		const parsed = JSON.parse(raw) as { inputs?: unknown };
-		if (!Array.isArray(parsed.inputs)) return [];
-		return parsed.inputs.filter(
-			(input): input is string =>
-				typeof input === 'string' && !basename(input).startsWith(PREVIEW_WRAPPER_PREFIX)
-		);
-	} catch {
-		return [];
-	}
+/**
+ * 从完整 HTML 文档里取出 `<body>` 内容。
+ *
+ * typst 只会输出自包含的完整文档（官方说输出片段是后续计划），而我们只要正文 ——
+ * 外面的 `<html>` / `<head>` 由本站自己管，否则一份文档就能改掉整页的 head。
+ */
+function extractBody(document: string): string {
+	const open = document.indexOf('<body>');
+	if (open === -1) return document;
+	const close = document.lastIndexOf('</body>');
+	if (close === -1 || close < open) return document.slice(open + '<body>'.length);
+	return document.slice(open + '<body>'.length, close);
 }
 
-/** 依赖文件的哈希：排序后把每个文件的 `mtimeMs + size` 喂给 sha256。缺文件记为 missing。 */
-async function hashInputFiles(
-	contentDir: string,
-	documentPath: string,
-	inputs: readonly string[]
-): Promise<string> {
-	const digest = createHash('sha256');
-	digest.update(documentPath);
-	for (const input of [...inputs].sort()) {
-		const stats = await stat(join(contentDir, input)).catch(() => null);
-		digest.update(input);
-		digest.update(stats ? `${stats.mtimeMs}:${stats.size}` : 'missing');
-	}
-	return digest.digest('hex').slice(0, 16);
+/** 去掉那条每次都会出现的实验特性提示，其余诊断原样保留。 */
+function cleanDiagnostics(stderr: string): string[] {
+	return stderr
+		.split('\n')
+		.map((line) => line.trimEnd())
+		.filter((line) => line.length > 0 && !line.startsWith('warning: html export is under active development'))
+		.map((line) => line.trim());
 }
 
-async function inputsStillMatch(
-	contentDir: string,
-	documentPath: string,
-	inputs: readonly string[],
-	hash: string
-): Promise<boolean> {
-	if (inputs.length === 0) return false;
-	return (await hashInputFiles(contentDir, documentPath, inputs)) === hash;
-}
-
-function rememberCompilation(absolutePath: string, entry: CompileCacheEntry): void {
-	const previous = compileCache.get(absolutePath);
-	if (previous) {
-		cacheBytes -= previous.pdf.byteLength;
-		compileCache.delete(absolutePath);
-	}
-
-	compileCache.set(absolutePath, entry);
-	cacheBytes += entry.pdf.byteLength;
-
-	while (cacheBytes > CACHE_LIMIT_BYTES && compileCache.size > 1) {
-		const oldest = compileCache.keys().next();
-		if (oldest.done) break;
-		const evicted = compileCache.get(oldest.value);
-		if (evicted) cacheBytes -= evicted.pdf.byteLength;
-		compileCache.delete(oldest.value);
-	}
-}
-
-/** 把 typst 的一行式诊断整理成字符串数组，并把 wrapper 的临时文件名换回文档路径。 */
-function describeCompileFailure(
-	error: unknown,
-	wrapperName: string,
-	documentPath: string
-): string[] {
+function describeFailure(error: unknown): string[] {
 	const failure = error as { killed?: boolean; stderr?: string; stdout?: string; message?: string };
 
 	if (failure?.killed) {
-		return [`typst 编译超时（${COMPILE_TIMEOUT_MS / 1000} 秒），已中止`];
+		return [`typst 渲染超时（${RENDER_TIMEOUT_MS / 1000} 秒），已中止`];
 	}
 
 	const raw = `${failure?.stderr ?? ''}${failure?.stdout ?? ''}`.trim();
-	if (!raw) {
-		return [`typst 编译失败：${failure?.message ?? '未知错误'}`];
+	const lines = cleanDiagnostics(raw);
+	if (lines.length === 0) {
+		return [`typst 渲染失败：${failure?.message ?? '未知错误'}`];
 	}
-
-	return raw
-		.split('\n')
-		.map((line) => line.trimEnd())
-		.filter((line) => line.length > 0)
-		.map((line) => line.split(wrapperName).join(documentPath));
+	return lines;
 }

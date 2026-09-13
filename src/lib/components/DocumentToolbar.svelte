@@ -1,26 +1,21 @@
 <script lang="ts">
 	/**
-	 * 文档工具条：在文档内查找、缩放、页码。
+	 * 文档工具条：在文档内查找、调字号。
 	 *
-	 * 纯展示 —— 不知道 pdf.js 的存在，全部状态由 DocumentViewer 持有并通过回调上下传。
+	 * 纯展示 —— 全部状态由 DocumentView 持有并通过回调上下传。
 	 * 高度压在 1.8em 以内，不抢正文。
+	 *
+	 * 曾经这里还有页码位和「适应宽度」那套（pdf 才有的概念），随着 pdf 出局一起没了：
+	 * 正文是真 DOM 文本，没有「页」，缩放就是字号。
 	 */
 	let {
 		query = $bindable(''),
 		matchLabel = '',
-		pageNumber = 0,
-		pageCount = 0,
-		resetTitle = '适应宽度',
 		onFind,
 		onZoom
 	}: {
 		query: string;
 		matchLabel: string;
-		/** 0 表示这份内容没有「页」的概念（markdown），页码位整个不显示。 */
-		pageNumber: number;
-		pageCount: number;
-		/** 那个 ↺ 按钮的含义随格式变：pdf 是「适应宽度」，markdown 是「恢复默认字号」。 */
-		resetTitle: string;
 		onFind: (direction: 'next' | 'previous') => void;
 		onZoom: (direction: 'in' | 'out' | 'fit') => void;
 	} = $props();
@@ -52,12 +47,9 @@
 	<button type="button" title="缩小" aria-label="缩小" onclick={() => onZoom('out')}>−</button>
 	<button type="button" title="放大" aria-label="放大" onclick={() => onZoom('in')}>+</button>
 	<!-- ↺ 而不是 ⤢：复位是「回到默认」，⤢ 读起来像「放大」 -->
-	<button type="button" title={resetTitle} aria-label={resetTitle} onclick={() => onZoom('fit')}
+	<button type="button" title="恢复默认字号" aria-label="恢复默认字号" onclick={() => onZoom('fit')}
 		>↺</button
 	>
-	{#if pageCount > 0}
-		<span class="pages">{pageNumber} / {pageCount}</span>
-	{/if}
 </div>
 
 <style>
@@ -114,14 +106,9 @@
 		color: var(--grey1);
 	}
 
-	.matches,
-	.pages {
+	.matches {
 		color: var(--grey1);
 		flex-shrink: 0;
-	}
-
-	.pages {
-		color: var(--blue);
 	}
 
 	.spacer {

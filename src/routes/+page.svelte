@@ -218,8 +218,7 @@
 
 	/* Chalk writing: character wobble + grain breakup.
 	   只套在真正是「文字」的渲染区上：树、状态栏，以及自己套滤镜的正文
-	   （markdown 的 article 在 ContentPane、文档 canvas 在 DocumentViewer）。
-	   这里不再套 .content-pane —— 文档视图会滚动多页，整栏套滤镜每帧都要重栅格化。 */
+	   （正文的 article 在 DocumentView 里）。整栏套滤镜会让大滚动区每帧重栅格化。 */
 	.chalk-app :global(.file-tree),
 	.chalk-app :global(footer) {
 		filter: url(#chalk-writing);

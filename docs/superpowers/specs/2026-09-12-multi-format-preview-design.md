@@ -1,4 +1,63 @@
-# 预览层扩展：markdown 之外支持 typst / pdf
+# 预览层扩展：markdown 之外支持 typst
+
+> **本文档已修订（2026-09-13）。** 下面「已敲定的决策」里带 ⛔ 的行是**旧设计**，
+> 保留是为了留下推演过程；**当前的设计以下面这一节为准**。本文件末尾那些以 pdf.js
+> 为中心的实现记录与风险清单同样是被推翻的那一版，只作存档。
+>
+> 修订原因：把「最终呈现一定是 HTML」当成管线的前提来推，会发现 PDF 是唯一一个
+> **在到达终态之前就把结构烧掉**的分支 —— 于是粉笔风格不得不在四个地方各补偿一次，
+> 而浏览器免费的搜索、选中、重排、响应式全都得用 JS 赎回来。typst 直接输出 HTML，
+> 这些补偿与赎回全部消失。
+
+## 当前设计（2026-09-13 修订）
+
+### 决策
+
+| # | 决策 | 结论 |
+| --- | --- | --- | --- |
+| A | 可预览的类型 | **只有 `.md` 与 `.typ`**。`.pdf` 不再是可预览类型，也不再进树 |
+| B | 终态 | 正文最终一定是 HTML —— 所以**服务端就把每一篇准备成 HTML**，而不是把 PDF 交给浏览器 |
+| C | 两类的区别 | markdown 内联**源文本**（客户端 marked 解析）；typst 内联**渲染好的 HTML 片段**。到了客户端都只是「一段正文」 |
+| D | 取内容 | **没有取内容这一步**。两者都随 SSR 载荷到达，点开零请求、零引擎启动。`/raw`、`/typst` 两条 HTTP 路由随之取消 |
+| E | 分派 | `preview-kind.ts` 只剩 `markdown \| typst`，判据是「哪种源文本」，不再是「哪种渲染器」 |
+| F | 内容 vs 样式 | 语义结构归内容（`#site-columns` / `#site-rule` / `#site-name` 这类按 `target()` 分流的 helper），**样式归站点样式表**。文档里不写颜色和尺寸 |
+| G | 粉笔风格 | 只在**一处**施加：文档视图里那个 `article`。编译期烘主题、canvas 像素反色、图像豁免反色全部取消 |
+| H | typst 渲染时机与缓存 | 每次请求现渲染，**不缓存**。实测 ~6ms，比读一遍源文件还便宜；调用方（`readContentTree`）本来每次请求都跑 |
+| I | 渲染失败 | typst 失败时该文件带 `error`（诊断行、带源位置）而不是 `content`；右栏显示诊断面板。一篇写坏的文档不该让整棵树打不开 |
+
+### 实测依据
+
+- typst 的 HTML 导出能力边界 —— **保留结构，丢弃视觉**：
+  - 活：标题、段落、`strong`/`emph`/`raw`、链接、列表、术语表、**表格**、**图片**、引用、脚注、代码块、figure/caption
+  - 死：`grid` / `place` / `align` / `stack` / `columns` / `rect` / `line` / `v`（`v` 在元素内部有时能活，位置不稳定）
+  - 关键区别：**不被支持的容器会连坐整棵子树**（`#grid` 里的名字、链接、照片一起消失），而纯视觉图元（`#rect`）是自己死。所以"内容被吃掉"其实是"容器被丢弃"
+  - 官方文档的定位：HTML 导出走**结构**、PDF 导出走**视觉**，两者意图不同，所以内容要对导出目标无感、由作者按 `target()` 分流
+- `html.elem("div", content, attrs: (...))` 只收**一个** content。把内容数组直接传进去，整个数组会被渲染成 `<code>`（踩过）。正确写法是 `body.pos().join()`
+- HTML 导出 **~6ms** vs PDF 导出 **~161ms**。产物 3.5 KB（那张 2.2 KB 的照片内嵌成 base64）
+
+### 旧决策的重评
+
+| 旧 # | 旧结论 | 旧做法 | 重评 |
+| --- | --- | --- | --- |
+| ⛔ 2 | 载体收敛 | 全站只有两种载体：**Markdown** 与 **PDF**。typst 编译成 PDF 后与 pdf 走同一条渲染路径 | **推翻**。它把「站点内容是打印产物、必须靠打印渲染器才能看」变成了全站结构 |
+| 3 | 不用 SVG（无文字对象） | 同旧做法 | ✅ 仍成立 |
+| ⛔ 4 | 不用 typst 的 HTML 导出 | 实测 `#grid` / `#place` / `#rect` 被**静默丢弃**且 exit 0 | **推翻**。丢弃是真的，但那是**摆放**被丢弃，不是内容被拒绝 —— 摆放本来就该按目标分流 |
+| 5 | 不用 iframe 嵌 PDF | 同旧做法 | ✅ 仍成立（问题已随 PDF 一起消失） |
+| ⛔ 6 | 渲染器 | **pdf.js 的 viewer 层**（`pdfjs-dist/web/pdf_viewer.mjs`），不是只用它的渲染 API。理由：搜索、缩放、翻页、fit-width、可见区懒渲染都在这一层里现成 | **推翻**。渲染器就是浏览器；viewer 层提供的东西 HTML 全都白给 |
+| ⛔ 7 | 两种检索都要 | **搜索栏**用 pdf.js 的 `PDFFindController`，抽文字、覆盖全部页；**浏览器 Ctrl+F 不拦截**，命中已渲染页 | **作废**。正文是真文本，两种查找覆盖同一份内容，不再有「缓冲区外找不到」的边界 |
+| ⛔ 8 | 两类文档的风格 | typst 编译期烘主题；现成 pdf 走 canvas 像素级反色 + 图像豁免 | **推翻**。风格统一在最外层 `article` 施加一次 |
+| 9 | 树的收录范围 | `.md` / `.typ` / `.pdf` | ✅ 保留，收窄为 `.md` / `.typ` |
+| ⛔ 10 | 缩放 / 翻页 / 页码 | **做**。viewer 层白拿，不自己写 | 页码作废（没有「页」）；缩放保留，语义改为**字号** |
+| ⛔ 11 | cMaps 与标准字体 | **自托管**：把 `pdfjs-dist/cmaps` 与 `pdfjs-dist/standard_fonts` 拷进 `static/pdfjs/` | **作废**。没有 PDF 要渲染了 |
+| 12 | 全站搜索不做 | 不做 | ✅ 仍成立 |
+
+### 代价与取舍
+
+- **typst 的 HTML 导出是实验特性**，官方明写不要用于生产；语义质量取决于作者怎么写。这是这条路的主要风险，已接受：它的失效模式是**编译期 warning + 内容缺失**，不是静默错误
+- **照片内嵌 base64**：typst 只能输出自包含文档，图片进不了外部资源。小图（本例 2.2 KB）无所谓；大图会让每篇文档的载荷显著变大，届时需要重新考虑
+- **`#v` 不稳定**：间距改用 CSS，文档里不写间距
+
+## 旧设计（已被上面取代，仅作存档）
 
 ## 背景
 
@@ -23,16 +82,16 @@
 ## 已敲定的决策
 
 | # | 决策 | 结论 |
-| --- | --- | --- |
+| --- | --- | --- | --- |
 | 1 | typst 预览的含义 | 编译后的排版结果 |
 | 2 | 载体收敛 | 全站只有两种载体：**Markdown** 与 **PDF**。typst 编译成 PDF 后与 pdf 走同一条渲染路径 |
 | 3 | 为什么不用 SVG | `--format svg` 的字是**字形轮廓**，实测整页 0 个 `<text>` 元素，文字不可选中（见「实测记录」A） |
-| 4 | 为什么不用 typst 的 HTML 导出 | 实测 `#grid` / `#place` / `#rect` 被**静默丢弃**且 exit 0，用 `#grid` 排两栏的真实 CV 会渲染成空白（见「实测记录」B） |
+| ⛔ 4 | 为什么不用 typst 的 HTML 导出 | 实测 `#grid` / `#place` / `#rect` 被**静默丢弃**且 exit 0 | **推翻**。丢弃是真的，但那是**摆放**被丢弃，不是内容被拒绝 —— 摆放本来就该按目标分流 |
 | 5 | 为什么不用原生 iframe 嵌 PDF | 移动端不可用：Android 触发下载、iOS 只渲染第一页（见「实测记录」D） |
 | 6 | 渲染器 | **pdf.js 的 viewer 层**（`pdfjs-dist/web/pdf_viewer.mjs`），不是只用它的渲染 API。理由：搜索、缩放、翻页、fit-width、可见区懒渲染都在这一层里现成（见「实测记录」E） |
 | 7 | 两种检索都要 | **搜索栏**用 pdf.js 的 `PDFFindController`，抽文字、覆盖全部页；**浏览器 Ctrl+F 不拦截**，命中已渲染页。两者覆盖面不同，是分工不是重复（见「实测记录」F） |
-| 8 | 两类文档的风格 | typst：**编译期**注入主题（页底、正文、链接、代码色）；现成 pdf：canvas 像素级处理，**反色时按对象豁免图像**（照片不变负片）。两者都常开，**不做开关** |
-| 9 | 树的收录范围 | 只收 `.md` / `.typ` / `.pdf`；**点号开头的文件与目录一律跳过** |
+| ⛔ 8 | 两类文档的风格 | typst：**编译期**注入主题；现成 pdf：canvas 像素级处理，反色时按对象豁免图像 | **推翻**。风格统一在最外层 `article` 施加一次 |
+| 9 | 树的收录范围 | `.md` / `.typ` / `.pdf` | ✅ 保留，收窄为 `.md` / `.typ` |
 | 10 | 缩放 / 翻页 / 页码 | **做**。viewer 层白拿，不自己写 |
 | 11 | cMaps 与标准字体 | **自托管**：把 `pdfjs-dist/cmaps` 与 `pdfjs-dist/standard_fonts` 拷进 `static/pdfjs/`。不配这两项，非嵌入标准字体与非嵌入 CJK 字体的 PDF 会缺字（见「风险」） |
 | 12 | 全站搜索（跨文件检索） | **不做**。这是另一个功能（要索引、结果列表、与「只靠文件树导航」的模型对接），该有自己的 spec —— 不是被这次含糊掉的 |
@@ -96,7 +155,7 @@ typst compile --format pdf cv.typ cv.pdf && pdftotext cv.pdf -
 `pdfjs-dist@6.3.289`，包内**没有** `exports` 映射，深路径导入合法：
 
 | 路径 | 体积 | 用途 |
-| --- | --- | --- |
+| --- | --- | --- | --- |
 | `build/pdf.min.mjs` | 458 KB | 主入口，导出 `getDocument` / `TextLayer` / `AnnotationLayer` / `GlobalWorkerOptions` |
 | `build/pdf.worker.min.mjs` | 1.26 MB | worker，用 `?url` 导入后赋给 `GlobalWorkerOptions.workerSrc` |
 | `web/pdf_viewer.mjs` | 320 KB | viewer 层，实测导出 `PDFViewer` / `EventBus` / `PDFLinkService` / `PDFFindController` / `LinkTarget` |
@@ -168,7 +227,7 @@ export interface FsEntry {
 ## 服务端路由
 
 | 路由 | 用途 | 响应 |
-| --- | --- | --- |
+| --- | --- | --- | --- |
 | `GET /raw/[...path]` | 现成 pdf 的原始字节 | `200` `application/pdf` + `Content-Disposition: inline` + `ETag` / `Last-Modified` + `Cache-Control: no-cache`；白名单**只有 `.pdf`** |
 | `GET /typst/[...path]` | typst 编译后的 pdf | `200` `application/pdf` + `ETag: "<deps hash>"` + `Cache-Control: no-cache` |
 | | | `422` `application/json` `{ error: string, diagnostics: string[] }` —— 编译失败 |
@@ -223,7 +282,7 @@ typst compile --format pdf --root . \
 `typst-compile.ts` 顶部集中定义，注释指向 `src/routes/+layout.svelte`：
 
 | 注入项 | 值 | 对应 CSS 变量 |
-| --- | --- | --- |
+| --- | --- | --- | --- |
 | 页底 | `rgb("#2D353B")` | `--bg0` |
 | 正文 | `rgb("#D3C6AA")` | `--fg` |
 | 链接 | `rgb("#7FBBB3")` | `--blue` |
@@ -477,7 +536,7 @@ viewer 层与工具条是 DOM/Svelte 世界的东西，按既有约定不写单�
 实现完成，`npm run check` 0 错误、`npm run test` 55 个用例全绿。以下是与设计不一致或设计里没写到的地方 —— 前两条是**照抄网上示例必然踩的坑**，只有真跑浏览器才能发现。
 
 | # | 事项 | 结论 |
-| --- | --- | --- |
+| --- | --- | --- | --- |
 | 1 | viewer 层的加载契约 | `web/pdf_viewer.mjs` 是**独立 bundle**，第 1960 行直接 `const {...} = globalThis.pdfjsLib`。必须先把核心模块挂到 `globalThis.pdfjsLib` 再 import 它，否则 `Cannot destructure property 'AbortException' of 'globalThis.pdfjsLib'`。那篇搭建指南的片段漏了这步 |
 | 2 | 容器的硬性要求 | 构造 `PDFViewer` 时若容器有 `offsetParent` 而 `position` 不是 `absolute`，直接抛 `The 'container' must be absolutely positioned.`。所以 DOM 是「relative 外壳 + absolute 滚动容器 + `.pdfViewer`」三层 |
 | 3 | find 事件类型 | 是 `'again'` 不是 `'findagain'`（本 spec 原文写错，已改）。写错会落进兜底分支：选中会跳，但高亮与计数不按预期刷新 |
@@ -516,6 +575,27 @@ delete WeakMap.prototype.getOrInsert;
 ```
 
 删完再加载页面并打开文档：modern 构建会报 `getOrInsertComputed is not a function`，legacy 构建能靠 core-js 补丁自愈（实测 `typeof Map.prototype.getOrInsertComputed` 会从 `undefined` 变回 `function`，画布正常渲染）。
+
+## 补充实现记录（2026-09-13）：pdf.js 样式表不再污染全页
+
+**现场**：选中 `cv.pdf` 后，文件树侧栏底部多出一条白边。实测侧栏被套上了 `padding-block: 5px`、`background-color: #fff`、`border-radius: 8px`、`min-width: 180px`、`position: relative`。
+
+**根因**：`pdf_viewer.css` 是一份**没有前缀**的全局样式表（142 条顶层规则、98 个类名），Vite 的 CSS 注入又是全局的，而它里面有一条通用的 `.sidebar{…}`（第 6105 行起），正好命中本页的 `<aside class="sidebar">`。它比 layout 里的 `*{padding:0}` 选择器优先级高，所以内边距赢了。只在 pdf/typst 出现，因为只有 `DocumentViewer` 会拉这份 CSS。改名躲开只能解决 `.sidebar` 这一个，`.page`/`.overlay`/`.dialog`/`.selected` 等 97 个还埋着。
+
+**做法**：新增 `src/lib/pdf-viewer-css.ts`，把这份 CSS 改写成「只作用于 `.pdfViewer` 子树」再自己插进文档头：
+
+1. 每条**最外层**选择器加 `.pdfViewer` 前缀（进到规则内部就不再加 —— 外层前缀已经覆盖）；
+2. 整份包进 `@layer pdfjs-viewer`，优先级压到本项目所有无层样式之下（兜底）；
+3. `DocumentViewer` 改用 `pdfjs-dist/web/pdf_viewer.css?inline` 取字符串，不再 `import()` 全局样式表。
+
+| # | 事项 | 结论 |
+| --- | --- | --- | --- |
+| 15 | 前缀必须幂等 | pdf.js 里有些规则**自己就带好了前缀**，而且恰好写在 at-rule 里（`@media print{ .pdfViewer .page{…} }`，那条给出页面真实尺寸的变量）。无条件再加一次就成了 `.pdfViewer .pdfViewer .page`：永远命中不了，页面高度算成 0，**pdf 直接白屏**。CSS 不会为此报错，只能靠断言拦 |
+| 16 | at-rule 不改变「是不是最外层」 | 第一版把 `@media` 当成「已经进到父规则内部」，于是 `@media print` 里的规则被跳过或重复加前缀。`@media`/`@supports`/`@layer` 里的规则仍是最外层，前缀照传 |
+| 17 | 手写扫描器，不用正则 | 800 多条嵌套规则、`{}` 必须配平；`content: "}"`、`url("data:image/svg+xml,<svg>{…}</svg>")` 这类值会骗过正则。字符串、注释都要跳过 |
+| 18 | 单测钉住实时样式表 | 除了小输入，`pdf-viewer-css.test.ts` 直接读 `node_modules/pdfjs-dist/web/pdf_viewer.css` 跑四条约束：每一条 `.sidebar` 都带前缀、没有一条选择器被加双层前缀、花括号配平、`.page` 的尺寸变量完整保留。pdf.js 升级后这些断言是安全网 |
+| 19 | 验证 | `npx svelte-check` 0 错误；`npx vitest run` 86 个用例全绿（本项 22 个）；dev 与 `vite build` + `vite preview` 两条路径都用 CDP 实测：侧栏 `padding: 0px`、`position: static`、无边框圆角阴影，pdf 页面 2255×3190、canvas 504×713、文字层在位，切 markdown/typst 来回切换正常，注入的样式表始终只有一份，控制台无未捕获异常 |
+| 20 | 副作用 | `.pdfViewer` 子树之外 pdf.js 的图标类（`.messageBar`、编辑器的 `images/*.svg` 光标）现在指不到它们的 `url(images/…)`，这些是本项目没用到的批注/编辑器 UI；页面渲染、文字层、查找高亮、反色豁免全部不受影响（已截图像素级对照） |
 
 ## 风险
 

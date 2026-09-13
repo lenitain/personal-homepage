@@ -1,30 +1,23 @@
 <script lang="ts">
-	import DocumentViewer from './DocumentViewer.svelte';
-	import MarkdownView from './MarkdownView.svelte';
+	import DocumentView from './DocumentView.svelte';
 	import { previewKindOf } from '$lib/preview-kind';
 	import type { FsEntry } from '$lib/types';
 
 	let { entry }: { entry: FsEntry | null } = $props();
 
 	let kind = $derived(entry ? previewKindOf(entry.name) : null);
-
-	/** 每段单独编码：文件名里可能有空格或 `#`，整串 encodeURI 处理不了它们。 */
-	function documentUrl(prefix: string, path: string): string {
-		const encoded = path.split('/').map(encodeURIComponent).join('/');
-		return `${prefix}/${encoded}`;
-	}
+	/** 渲染失败的 typst 只有 `error`、没有 `content`，但它仍然是一篇要打开的文档。 */
+	let failed = $derived(Boolean(entry && entry.content === undefined && entry.error));
 </script>
 
 <!--
-	三种格式各自一个视图组件，但共用同一个 DocumentToolbar（`tone` 与缩放/查找的语义
-	由各自的视图负责）。markdown 用 MarkdownView，typst / pdf 都走 DocumentViewer。
+	两种格式走同一个视图：正文在服务端就已经备好了（markdown 是源文本、typst 已经渲染成
+	HTML 片段），客户端不再有「取内容」这一步 —— 没有 URL、没有请求、没有加载态。
 -->
-{#if entry && kind === 'typst'}
-	<DocumentViewer url={documentUrl('/typst', entry.path)} tone="chalk" title={entry.name} />
-{:else if entry && kind === 'pdf'}
-	<DocumentViewer url={documentUrl('/raw', entry.path)} tone="invert" title={entry.name} />
-{:else if entry && kind === 'markdown' && entry.content}
-	<MarkdownView source={entry.content} />
+{#if entry && entry.content !== undefined && kind}
+	<DocumentView {kind} source={entry.content} error={entry.error} />
+{:else if entry && failed}
+	<DocumentView kind={kind ?? 'typst'} source="" error={entry.error} />
 {:else}
 	<div class="content-pane">
 		<div class="empty">select a file to preview</div>

@@ -53,25 +53,25 @@ describe('readContentTree', () => {
 		expect(blog.children?.[0].path).toBe('blog/why-yazi.md');
 	});
 
-	test('只收 .md / .typ / .pdf，别的文件一概不进树', async () => {
+	test('只收 .md / .typ，别的文件一概不进树', async () => {
 		await writeFixture('readme.md');
 		await writeFixture('notes.txt');
-		await writeFixture('cv.typ');
-		await writeFixture('cv.pdf');
+		await writeFixture('cv.typ', '= CV\n');
+		await writeFixture('cv.pdf', '%PDF-1.7 not really');
 		await writeFixture('blog/why-yazi.md');
 		await writeFixture('blog/diagram.png');
 
 		const entries = await readContentTree(contentDir);
 
-		expect(entries.map((entry) => entry.name)).toEqual(['blog', 'cv.pdf', 'cv.typ', 'readme.md']);
+		expect(entries.map((entry) => entry.name)).toEqual(['blog', 'cv.typ', 'readme.md']);
 		expect(entries[0].children?.map((child) => child.name)).toEqual(['why-yazi.md']);
 	});
 
-	test('点号开头的文件与目录都不进树 —— typst 编译的 wrapper 就是隐藏文件', async () => {
+	test('点号开头的文件与目录都不进树', async () => {
 		await writeFixture('readme.md');
-		await writeFixture('.preview-a1b2.typ');
+		await writeFixture('.draft.md');
 		await writeFixture('.hidden/notes.md');
-		await writeFixture('blog/.preview-c3d4.typ');
+		await writeFixture('blog/.draft.typ', '= D\n');
 		await writeFixture('blog/why-yazi.md');
 
 		const entries = await readContentTree(contentDir);
@@ -100,7 +100,7 @@ describe('readContentTree', () => {
 		expect(entries[0].children?.[0].children?.[0].path).toBe('projects/dotfiles/aliases.md');
 	});
 
-	test('文件带着正文和 ISO 格式的修改时间', async () => {
+	test('markdown 内联的是源文本', async () => {
 		await writeFixture('readme.md', '# hello\n');
 
 		const [readme] = await readContentTree(contentDir);
@@ -110,6 +110,27 @@ describe('readContentTree', () => {
 		expect(readme.mtime).toMatch(/^\d{4}-\d{2}-\d{2}T/);
 	});
 
+	test('typst 内联的是渲染好的 HTML 片段，不是源文本', async () => {
+		await writeFixture('cv.typ', '= Title\n\nBody text\n');
+
+		const [cv] = await readContentTree(contentDir);
+
+		expect(cv.content).toContain('<h2>Title</h2>');
+		expect(cv.content).toContain('Body text');
+		// 源文本里那行 `= Title` 不该原样出现在产物里
+		expect(cv.content).not.toContain('= Title');
+		expect(cv.error).toBeUndefined();
+	});
+
+	test('渲染失败的 typst 没有 content，只有 error 诊断', async () => {
+		await writeFixture('broken.typ', '= Hi\n#let x = \n');
+
+		const [broken] = await readContentTree(contentDir);
+
+		expect(broken.content).toBeUndefined();
+		expect(broken.error?.join('\n')).toContain('broken.typ:2');
+	});
+
 	test('size 是字节数，不是字符数', async () => {
 		await writeFixture('readme.md', '# 你好\n');
 
@@ -117,19 +138,6 @@ describe('readContentTree', () => {
 
 		expect(readme.size).toBe(9);
 		expect(readme.content?.length).toBe(5);
-	});
-
-	test('只有 markdown 内联正文，typst 与 pdf 不带 content', async () => {
-		await writeFixture('readme.md', '# hi\n');
-		await writeFixture('cv.typ', '= CV\n');
-		await writeFixture('cv.pdf', '%PDF-1.7 not really');
-
-		const entries = await readContentTree(contentDir);
-		const byName = new Map(entries.map((entry) => [entry.name, entry]));
-
-		expect(byName.get('readme.md')?.content).toBe('# hi\n');
-		expect(byName.get('cv.typ')?.content).toBeUndefined();
-		expect(byName.get('cv.pdf')?.content).toBeUndefined();
 	});
 
 	test('目录不带 size', async () => {

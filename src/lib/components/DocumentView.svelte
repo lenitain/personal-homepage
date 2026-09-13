@@ -2,20 +2,30 @@
 	import { onMount } from 'svelte';
 	import { marked } from 'marked';
 	import DocumentToolbar from './DocumentToolbar.svelte';
-	import {
-		readMarkdownFontScale,
-		resetMarkdownFontScale,
-		stepMarkdownFontScale
-	} from '$lib/preview-zoom';
+	import { readFontScale, resetFontScale, stepFontScale } from '$lib/preview-zoom';
+	import type { PreviewKind } from '$lib/preview-kind';
 
 	/**
-	 * markdown 视图：工具栏 + 正文。
+	 * 右栏唯一的文档视图。
 	 *
-	 * 跟 pdf / typst 那份（DocumentViewer）共用同一个 DocumentToolbar，交互契约也一样 ——
-	 * 输入即搜、回车下一个、Shift+回车上一个、计数显示「第几个 / 共几个」。区别只有两处：
-	 * 这里是真 DOM 文字，高亮自己包 `<mark>`；没有「页」，所以页码位留空、缩放改成调字号。
+	 * **两种格式在这里没有区别**：markdown 交给 marked 解析成 HTML，typst 在服务端
+	 * 已经渲染成 HTML 片段。到了这一步都只是「一段 HTML 正文」，于是查找、字号、
+	 * 粉笔风格、选中行为全都只有一份实现。
+	 *
+	 * 这正是把 typst 从 pdf 换成 html 的全部意义：以前 pdf 那份要走 canvas + 文字层 +
+	 * pdf.js 自己的查找控制器，风格还得靠像素级反色补救；现在它就是正文。
 	 */
-	let { source }: { source: string } = $props();
+	let {
+		kind,
+		source,
+		error = null
+	}: {
+		kind: PreviewKind;
+		/** markdown 是源文本；typst 是渲染好的 HTML 片段。 */
+		source: string;
+		/** 非空表示这篇 typst 渲染失败了，此时显示诊断而不是正文。 */
+		error?: string[] | null;
+	} = $props();
 
 	let pane = $state<HTMLElement | null>(null);
 	let query = $state('');
@@ -23,16 +33,17 @@
 	/**
 	 * 先按默认字号渲染，挂载后再取存档值。
 	 *
-	 * 不能直接 `$state(readMarkdownFontScale())`：SSR 阶段服务端读不到 localStorage、
+	 * 不能直接 `$state(readFontScale())`：SSR 阶段服务端读不到 localStorage、
 	 * 客户端水合时读得到，两边算出的 font-size 不一样，Svelte 会报水合不匹配。
 	 */
 	let fontScale = $state(1);
 
 	onMount(() => {
-		fontScale = readMarkdownFontScale();
+		fontScale = readFontScale();
 	});
 
-	let html = $derived(marked.parse(source) as string);
+	/** typst 的片段是服务端渲染好的，直接用；markdown 现解析。 */
+	let html = $derived(kind === 'typst' ? source : (marked.parse(source) as string));
 
 	/** 当前包出来的命中元素，按文档顺序。清空时靠它把 DOM 还原回去。 */
 	let hits: HTMLElement[] = [];
@@ -122,27 +133,38 @@
 	}
 
 	function zoom(direction: 'in' | 'out' | 'fit') {
-		fontScale =
-			direction === 'fit' ? resetMarkdownFontScale() : stepMarkdownFontScale(direction);
+		fontScale = direction === 'fit' ? resetFontScale() : stepFontScale(direction);
 	}
 </script>
 
-<DocumentToolbar
-	bind:query
-	{matchLabel}
-	pageNumber={0}
-	pageCount={0}
-	resetTitle="恢复默认字号"
-	onFind={find}
-	onZoom={zoom}
-/>
+{#if error}
+	<div class="failure">
+		<p>{kind} 渲染失败</p>
+		<pre>{error.join('\n')}</pre>
+	</div>
+{:else}
+	<DocumentToolbar bind:query {matchLabel} onFind={find} onZoom={zoom} />
 
-<div class="markdown-scroll" bind:this={pane}>
-	<article style="font-size: {fontScale}em">{@html html}</article>
-</div>
+	<div class="document-scroll" bind:this={pane}>
+		<article style="font-size: {fontScale}em">{@html html}</article>
+	</div>
+{/if}
 
 <style>
-	.markdown-scroll {
+	.failure {
+		padding: 0.8em;
+		color: var(--red);
+	}
+
+	.failure pre {
+		margin-top: 0.4em;
+		white-space: pre-wrap;
+		font-family: 'Kalam', 'Patrick Hand', 'Yusei Magic', cursive;
+		font-size: 0.9em;
+		color: var(--orange);
+	}
+
+	.document-scroll {
 		flex: 1;
 		min-height: 0;
 		overflow-y: auto;
@@ -151,9 +173,8 @@
 	}
 
 	/*
-	 * 粉笔抖动只套在正文上。原先套在整栏（见 +page.svelte），文档视图进来后
-	 * 会拖垮多页滚动，所以按内容类型各自套：正文在这里，pdf / typst 的 canvas
-	 * 在 DocumentViewer 里按页套。
+	 * 粉笔抖动只套在正文上。原先套在整栏（见 +page.svelte），滚动区一大就会拖垮
+	 * 重栅格化，所以按内容类型各自套 —— 现在只有这一处，因为只剩这一种正文。
 	 */
 	article {
 		filter: url(#chalk-writing);
@@ -170,7 +191,8 @@
 		color: var(--bg0);
 	}
 
-	/* Markdown content styling */
+	/* ---- 正文排版：两种格式共用 ---- */
+
 	article :global(h1) {
 		color: var(--green);
 		font-size: 1.3em;
@@ -256,6 +278,11 @@
 		background: var(--bg1);
 	}
 
+	/*
+	 * 分隔线。两种格式都给 `<hr>`：markdown 的 `---`，typst 的 `#divider()`
+	 * （0.15 新增的语义元素，HTML 目标下正是 `<hr>`）。所以一条规则管两处 ——
+	 * 不需要再为 typst 单独造一个带 class 的画线 helper。
+	 */
 	article :global(hr) {
 		border: none;
 		border-top: 1px solid var(--bg4);
@@ -278,5 +305,43 @@
 	article :global(th) {
 		background: var(--bg2);
 		color: var(--yellow);
+	}
+
+	article :global(img) {
+		max-width: 100%;
+		height: auto;
+	}
+
+	/* ---- typst 专用：内容侧交出的结构，样式在这里定 ---- */
+
+	/* `#site-columns` 在 HTML 目标下就是这个词：两栏归样式表管。 */
+	article :global(.cv-columns) {
+		display: grid;
+		grid-template-columns: 1fr 2.4fr;
+		gap: 1.2em;
+		align-items: start;
+		margin-bottom: 1em;
+	}
+
+	/* `#site-name` / `#site-subtitle`：语义是 h1 + p，外观在这里给。 */
+	article :global(.cv-name) {
+		margin: 0;
+		border: none;
+		padding: 0;
+		font-size: 1.6em;
+	}
+
+	article :global(.cv-subtitle) {
+		margin: 0.2em 0 0;
+		font-style: italic;
+		color: var(--grey2);
+	}
+
+
+	/* 窄屏下两栏并排放不下，摊成一栏 */
+	@media (max-width: 640px) {
+		article :global(.cv-columns) {
+			grid-template-columns: 1fr;
+		}
 	}
 </style>
