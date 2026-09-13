@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { marked } from 'marked';
 	import DocumentToolbar from './DocumentToolbar.svelte';
 	import {
@@ -19,7 +20,17 @@
 	let pane = $state<HTMLElement | null>(null);
 	let query = $state('');
 	let matchLabel = $state('');
-	let fontScale = $state(readMarkdownFontScale());
+	/**
+	 * 先按默认字号渲染，挂载后再取存档值。
+	 *
+	 * 不能直接 `$state(readMarkdownFontScale())`：SSR 阶段服务端读不到 localStorage、
+	 * 客户端水合时读得到，两边算出的 font-size 不一样，Svelte 会报水合不匹配。
+	 */
+	let fontScale = $state(1);
+
+	onMount(() => {
+		fontScale = readMarkdownFontScale();
+	});
 
 	let html = $derived(marked.parse(source) as string);
 

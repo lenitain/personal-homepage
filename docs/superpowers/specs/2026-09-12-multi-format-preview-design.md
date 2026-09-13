@@ -490,6 +490,8 @@ viewer 层与工具条是 DOM/Svelte 世界的东西，按既有约定不写单�
 | 10 | **必须用 legacy 构建** | 第一版用了 `pdfjs-dist/build/pdf.mjs`（modern），在你的浏览器里报 `文档加载失败：this[#listeners].getOrInsertComputed is not a function` —— modern 构建直接用 `Map.prototype.getOrInsertComputed` 这类新 API，没有它整个文档打不开。改成 `legacy/build/pdf.mjs` + `legacy/build/pdf.worker.min.mjs`：里面带 core-js 补丁（含特性探测），代价约 +60KB 主包 / +50KB worker。我的无头 Chromium 是 152（已支持该 API）所以第一轮没暴露 —— 教训是**验证环境的浏览器版本也是变量**，复现办法见下 |
 | 11 | 工具栏对三种格式一视同仁 | 工具栏原先长在 `DocumentViewer` 里，markdown 没有。改成三格式共用同一个 `DocumentToolbar`：markdown 走新增的 `MarkdownView.svelte`（自己实现 DOM 内查找 + 调字号），typst/pdf 仍走 `DocumentViewer`。markdown 没有「页」，所以页码位不渲染；`⤢` 换成 `↺`（前者读起来像「放大」），按钮含义随格式变 |
 | 12 | 缩放状态的生命周期 | 新增 `src/lib/preview-zoom.ts`：markdown 字号与 pdf/typst 缩放都存模块作用域，**一次页面访问内**换文件、切格式都保留，刷新或关标签页即复位。纯内存，不落 localStorage、不上服务端 —— 与文件树展开状态同口径。此前 pdf 那侧每次挂载都把 `currentScaleValue` 设回 `page-width`，换文件即丢，属于不一致 |
+| 13 | dev 下的一条 pdf.js 误报 | 切到 pdf 时控制台出现一次 `[svelte] state_proxy_equality_mismatch`。定位：Svelte 的 dev 插桩只在「本数组 `includes` 返回 false、而某个元素去掉代理后 `===` 目标值」时警告（`svelte/src/internal/client/dev/equality.js`），对普通数组只有一条触发路径 —— `includes` 带了 `fromIndex`（跳过前面的元素），而它的检查循环从 0 扫全数组。调用栈内层是 core-js 的模块初始化，即 legacy 构建 import 时的特性探测；我给 pdf.js 的参数里没有任何数组。**结论：dev-only 误报，不影响行为**，生产构建实测控制台干净 |
+| 14 | 顺带验了生产构建 | `npm run build` 通过；`npm run preview` 下真浏览器跑：markdown 首屏、`cv.pdf`（画布 1、文字层 58 个 span ⇒ 可选中）、`cv.typ` 全部正常，控制台干净、无失败请求 —— 说明 worker 的 `?url` 导入与动态 import 的 CSS 在生产打包下都对。另：`adapter-auto` 提示未识别部署环境，真部署时要选适配器（跟本次改动无关） |
 
 验证结果（真实浏览器）：
 

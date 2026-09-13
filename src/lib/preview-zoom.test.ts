@@ -1,56 +1,120 @@
-import { beforeEach, describe, expect, test } from 'vitest';
-import {
-	readDocumentScaleValue,
-	readMarkdownFontScale,
-	rememberDocumentScaleValue,
-	resetMarkdownFontScale,
-	stepMarkdownFontScale
-} from './preview-zoom';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
-/**
- * 这些状态活在模块作用域里 —— 换文件会重挂载组件，存组件里就丢了。
- * 每个用例先把两边都复位，免得相互串味。
- */
+const FONT_KEY = 'preview-zoom:markdown-font-scale';
+const DOC_KEY = 'preview-zoom:document-scale';
+
+/** 够用的 localStorage 替身。 */
+function memoryStorage() {
+	const entries = new Map<string, string>();
+	return {
+		getItem: (key: string) => entries.get(key) ?? null,
+		setItem: (key: string, value: string) => void entries.set(key, value),
+		removeItem: (key: string) => void entries.delete(key)
+	};
+}
+
+/** 重新加载模块 —— 相当于刷新页面：模块级变量清空，只剩 localStorage 里的东西。 */
+async function reloadModule() {
+	vi.resetModules();
+	return await import('./preview-zoom');
+}
+
 beforeEach(() => {
-	resetMarkdownFontScale();
-	rememberDocumentScaleValue('page-width');
+	vi.stubGlobal('localStorage', memoryStorage());
+});
+
+afterEach(() => {
+	vi.unstubAllGlobals();
 });
 
 describe('preview-zoom', () => {
-	test('markdown 字号默认是 1，文档缩放默认是适应宽度', () => {
-		expect(readMarkdownFontScale()).toBe(1);
-		expect(readDocumentScaleValue()).toBe('page-width');
+	test('默认是字号 1、文档适应宽度', async () => {
+		const zoom = await reloadModule();
+
+		expect(zoom.readMarkdownFontScale()).toBe(1);
+		expect(zoom.readDocumentScaleValue()).toBe('page-width');
 	});
 
-	test('放大缩小按倍率走', () => {
-		expect(stepMarkdownFontScale('in')).toBeCloseTo(1.1);
-		expect(stepMarkdownFontScale('in')).toBeCloseTo(1.21);
-		expect(stepMarkdownFontScale('out')).toBeCloseTo(1.1);
+	test('放大缩小按倍率走', async () => {
+		const zoom = await reloadModule();
+
+		expect(zoom.stepMarkdownFontScale('in')).toBeCloseTo(1.1);
+		expect(zoom.stepMarkdownFontScale('in')).toBeCloseTo(1.21);
+		expect(zoom.stepMarkdownFontScale('out')).toBeCloseTo(1.1);
 	});
 
-	test('字号上下都有夹子，怎么点都不会跑飞', () => {
-		for (let i = 0; i < 30; i++) stepMarkdownFontScale('in');
-		expect(readMarkdownFontScale()).toBe(2);
+	test('字号上下都有夹子，怎么点都不会跑飞', async () => {
+		const zoom = await reloadModule();
 
-		for (let i = 0; i < 60; i++) stepMarkdownFontScale('out');
-		expect(readMarkdownFontScale()).toBe(0.75);
+		for (let i = 0; i < 30; i++) zoom.stepMarkdownFontScale('in');
+		expect(zoom.readMarkdownFontScale()).toBe(2);
+
+		for (let i = 0; i < 60; i++) zoom.stepMarkdownFontScale('out');
+		expect(zoom.readMarkdownFontScale()).toBe(0.75);
 	});
 
-	test('复位回到默认字号', () => {
-		stepMarkdownFontScale('in');
-		stepMarkdownFontScale('in');
+	test('复位回到默认字号', async () => {
+		const zoom = await reloadModule();
+		zoom.stepMarkdownFontScale('in');
+		zoom.stepMarkdownFontScale('in');
 
-		expect(resetMarkdownFontScale()).toBe(1);
-		expect(readMarkdownFontScale()).toBe(1);
+		expect(zoom.resetMarkdownFontScale()).toBe(1);
 	});
 
-	test('文档缩放记住数字（pdf 的 currentScale），也记得住适应宽度这个模式', () => {
-		expect(readDocumentScaleValue()).toBe('page-width');
+	test('刷新页面后字号还在', async () => {
+		const before = await reloadModule();
+		before.stepMarkdownFontScale('in');
+		before.stepMarkdownFontScale('in');
 
-		rememberDocumentScaleValue(1.884);
-		expect(readDocumentScaleValue()).toBe(1.884);
+		const after = await reloadModule();
 
-		rememberDocumentScaleValue('page-width');
-		expect(readDocumentScaleValue()).toBe('page-width');
+		expect(after.readMarkdownFontScale()).toBeCloseTo(1.21);
+	});
+
+	test('刷新页面后文档缩放还在，连「适应宽度」这个模式也记得住', async () => {
+		const before = await reloadModule();
+		before.rememberDocumentScaleValue(1.884);
+
+		const after = await reloadModule();
+		expect(after.readDocumentScaleValue()).toBe(1.884);
+
+		after.rememberDocumentScaleValue('page-width');
+		expect((await reloadModule()).readDocumentScaleValue()).toBe('page-width');
+	});
+
+	test('存坏的数字退回默认 —— 不能让 pdf.js 收到 NaN 或非法倍率', async () => {
+		localStorage.setItem(DOC_KEY, 'NaN');
+		expect((await reloadModule()).readDocumentScaleValue()).toBe('page-width');
+
+		localStorage.setItem(DOC_KEY, 'abc');
+		expect((await reloadModule()).readDocumentScaleValue()).toBe('page-width');
+
+		localStorage.setItem(DOC_KEY, '-3');
+		expect((await reloadModule()).readDocumentScaleValue()).toBe('page-width');
+	});
+
+	test('存坏的字号夹回合法区间', async () => {
+		localStorage.setItem(FONT_KEY, '99');
+		expect((await reloadModule()).readMarkdownFontScale()).toBe(2);
+
+		localStorage.setItem(FONT_KEY, '0.01');
+		expect((await reloadModule()).readMarkdownFontScale()).toBe(0.75);
+	});
+
+	test('localStorage 不可用（隐私模式）时照常工作，只是不持久化', async () => {
+		vi.stubGlobal('localStorage', {
+			getItem() {
+				throw new Error('storage denied');
+			},
+			setItem() {
+				throw new Error('storage denied');
+			}
+		});
+
+		const zoom = await reloadModule();
+
+		expect(zoom.stepMarkdownFontScale('in')).toBeCloseTo(1.1);
+		expect(zoom.readMarkdownFontScale()).toBeCloseTo(1.1);
+		expect(zoom.readDocumentScaleValue()).toBe('page-width');
 	});
 });
