@@ -421,6 +421,7 @@
 		{matchLabel}
 		{pageNumber}
 		{pageCount}
+		resetTitle="适应宽度"
 		onFind={find}
 		onZoom={zoom}
 	/>

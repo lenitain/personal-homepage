@@ -8,15 +8,19 @@
 	let {
 		query = $bindable(''),
 		matchLabel = '',
-		pageNumber = 1,
-		pageCount = 1,
+		pageNumber = 0,
+		pageCount = 0,
+		resetTitle = '适应宽度',
 		onFind,
 		onZoom
 	}: {
 		query: string;
 		matchLabel: string;
+		/** 0 表示这份内容没有「页」的概念（markdown），页码位整个不显示。 */
 		pageNumber: number;
 		pageCount: number;
+		/** 那个 ↺ 按钮的含义随格式变：pdf 是「适应宽度」，markdown 是「恢复默认字号」。 */
+		resetTitle: string;
 		onFind: (direction: 'next' | 'previous') => void;
 		onZoom: (direction: 'in' | 'out' | 'fit') => void;
 	} = $props();
@@ -47,10 +51,13 @@
 
 	<button type="button" title="缩小" aria-label="缩小" onclick={() => onZoom('out')}>−</button>
 	<button type="button" title="放大" aria-label="放大" onclick={() => onZoom('in')}>+</button>
-	<button type="button" title="适应宽度" aria-label="适应宽度" onclick={() => onZoom('fit')}
-		>⤢</button
+	<!-- ↺ 而不是 ⤢：复位是「回到默认」，⤢ 读起来像「放大」 -->
+	<button type="button" title={resetTitle} aria-label={resetTitle} onclick={() => onZoom('fit')}
+		>↺</button
 	>
-	<span class="pages">{pageNumber} / {pageCount}</span>
+	{#if pageCount > 0}
+		<span class="pages">{pageNumber} / {pageCount}</span>
+	{/if}
 </div>
 
 <style>
