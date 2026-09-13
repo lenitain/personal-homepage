@@ -44,9 +44,21 @@
 		--grey1: #859289;
 		--grey2: #9DA9A0;
 
+		/*
+		 * 全站唯一的字体栈。要换手写体只改这一行 —— 别处一律 font-family: var(--font-chalk)。
+		 *
+		 * 逐字降级，靠的是浏览器原生行为，不需要任何逻辑：
+		 *   英文数字 → Kalam；Kalam 缺字 → Patrick Hand
+		 *   中文     → ZCOOL KuaiLe；它缺字或加载失败 → LXGW WenKai → Ma Shan Zheng
+		 *   最后     → generic
+		 * 尾部不再点名任何具体字体：连三个中文字体都拿不到时，就认了系统默认。
+		 */
+		--font-chalk: 'Kalam', 'Patrick Hand', 'ZCOOL KuaiLe', 'LXGW WenKai', 'Ma Shan Zheng',
+			cursive, sans-serif;
+
 		background: var(--bg0);
 		color: var(--fg);
-		font-family: 'Kalam', 'Patrick Hand', 'Yusei Magic', cursive;
+		font-family: var(--font-chalk);
 		font-size: 1.125rem;
 	}
 

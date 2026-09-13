@@ -7,7 +7,15 @@
 		<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 		<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/kalam@5/index.css" />
 		<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/patrick-hand@5/index.css" />
-		<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/yusei-magic@5/index.css" />
+		<!--
+			中文手写体，按链条顺序逐个降级：站酷快乐体 → 霞鹜文楷 → 马善政毛笔楷书。
+			三个都按 unicode-range 分片，浏览器只取当前页面用到的字所在的分片。
+			后两个平时几乎用不上 —— 站内的汉字第一个全包了，它们只在缺字、前者加载失败，
+			或者界面上那几个当图标用的字符（▸ ▾ ▶ ↺ ⌕）谁都接不住时才被碰到。
+		-->
+		<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/zcool-kuaile@5/index.css" />
+		<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/lxgwwenkai-regular.css" />
+		<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource/ma-shan-zheng@5/index.css" />
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

@@ -59,15 +59,35 @@ Google 那套中文字体在 fontsource / jsDelivr 上已经被按 `unicode-rang
 且新写的正文一旦出现没进子集的字就会缺字**。对一个持续在写内容的主页来说，这个长期
 负债比那几百 KB 更贵。所以选分片。
 
-### 二、B 和 C 在正常情况下的下载量是 0
+### 二、汉字一个都不会漏给 B、C，但**图标字形会**
 
 逐个字符核对过：ZCOOL KuaiLe 对站内 969 个字的覆盖是**满的**，包括 `——`「」《》【】、
 。、？！：；（）这些标点（`U+2014` / `U+300C-300D` / `U+3001-3002` / `U+FF01-FF5D` 全部命中）。
 它「覆盖」不等于它「接管」—— 链条上排在它前面的字体先赢，见下一节。
 
-于是 B、C 只在两种情况下才会真正用到：**A 缺字**（以后内容里出现 ZCOOL 未收录的字），
-或者 **A 加载失败**。浏览器不会为用不到的字体下载字体文件 —— 这让「多加两层降级」
-的实际代价只剩 CSS：
+> **设计时的判断在这里被实测推翻了一半，保留原文并更正如下。**
+> 原判断是「B、C 的字体文件下载量是 0」。汉字部分成立，**但界面上那几个当图标用的
+> 字符会漏下去**：树里的折叠箭头 `▸`（U+25B8）`▾`（U+25BE）、演示按钮的 `▶`（U+25B6）、
+> 复位字号的 `↺`（U+21BA）、搜索框的 `⌕`（U+2315）。
+>
+> 它们不在 Kalam 的范围内，也不在三个中文字体的**实际字形**里。浏览器按 unicode-range
+> 认为「这一片可能有用」就去取，取回来发现没有这个字形，再继续往后走 —— 于是白白下了：
+>
+> | 分片 | 大小 |
+> | --- | --- |
+> | lxgwwenkai-regular-subset-88 | 10 KB |
+> | lxgwwenkai-regular-subset-90 | 14 KB |
+> | lxgwwenkai-regular-subset-104 | 58 KB |
+> | lxgwwenkai-regular-subset-106 | 58 KB |
+> | ma-shan-zheng-90-400 | 1 KB |
+> | **合计（首访多花）** | **141 KB** |
+>
+> 其中只有 `▶` 真的由 LXGW WenKai 画出来了，其余仍然落到系统字体上。
+> 这不是本次改动引入的：改之前 Yusei Magic 同样不覆盖 `▸ ▾ ↺ ⌕`（只覆盖 `▶`），
+> 那几个箭头本来就一直是系统字体画的。真正的修法是别再拿字符当图标，但那超出本次范围。
+
+于是 B、C 里的**汉字分片**只在这两种情况下才会被下载：**A 缺字**（以后内容里出现
+ZCOOL 未收录的字），或者 **A 加载失败**。除图标以外，「多加两层降级」的固定代价只剩 CSS：
 
 | | 原始 | gzip |
 | --- | --- | --- |
@@ -86,10 +106,10 @@ Google 那套中文字体在 fontsource / jsDelivr 上已经被按 `unicode-rang
 | | 现在 | 改后 |
 | --- | --- | --- |
 | 字体 CSS（gzip） | 31 KB | ~94 KB |
-| 字体文件（首访） | Yusei Magic 1171 KB | ZCOOL 448 KB，**B/C 为 0** |
-| **合计** | **~1.2 MB** | **~0.55 MB** |
+| 字体文件（首访） | Yusei Magic 1171 KB | ZCOOL 448 KB + 图标漏下的 141 KB = **589 KB** |
+| **合计** | **~1.2 MB** | **~0.68 MB** |
 
-净减约 650 KB，同时中文从「日文字形 + Noto」变成手写体。
+净减约 530 KB，同时中文从「日文字形 + Noto」变成手写体。
 
 ## 不做什么
 
@@ -134,12 +154,44 @@ font-family: var(--font-chalk);
 
 ## 验证
 
-1. `pnpm test` 与 `pnpm check` 全绿
+1. `vitest run` 与 `svelte-check` 全绿
 2. 用 headless chromium 打开真实课件页（`content/hacks/resident-browser/index.typ`），
    截改前 / 改后对照图，确认中文笔画形态确实变了
-3. 浏览器 Network：确认只请求了 ZCOOL 的分片，**B/C 的 woff2 一次都没被请求**
-4. 核对 969 个汉字 + 全角标点无豆腐块
+3. 浏览器 Network：确认 B/C 只在图标字形上被请求（见上文更正），汉字一个都没漏
+4. 逐字核对无豆腐块
 5. 窄视口（≤640px）与演示模式各看一眼（这两处字号会变）
+
+## 实测记录（2026-09-14 实现后补）
+
+验证方式：CDP 驱动 headless chromium 打开 `content/hacks/resident-browser/index.typ`，
+用 **`CSS.getPlatformFontsForNode`**（DevTools「Rendered Fonts」面板背后的同一个接口）
+问浏览器「这一页的字到底是谁画的」—— 不靠肉眼猜，也不靠 canvas 近似。
+
+正常状态下，整页 166 个文本元素：
+
+| 字体 | 字形数 | 占比 |
+| --- | --- | --- |
+| Kalam | 2165 | 51.4% |
+| **ZCOOL KuaiLe** | **2042** | **48.5%** |
+| DejaVu Sans | 9 | 0.2% |
+| LXGW WenKai | 1 | 0.02% |
+| Adwaita Mono | 2 | 0.05% |
+
+**汉字 100% 落在 ZCOOL KuaiLe 上，没有一个掉到 Noto。** LXGW 的那 1 个字形是演示按钮的
+`▶`；DejaVu Sans / Adwaita Mono 那 11 个是树箭头与搜索图标（改动前就如此）。
+
+降级链用 CDP 屏蔽资源来验，三张截图都在 `.superpowers/verify/`：
+
+| 场景 | 屏蔽 | 结果 |
+| --- | --- | --- |
+| 正常 | 无 | 中文 = ZCOOL KuaiLe（手绘马克笔） |
+| A 挂掉 | `zcool-kuaile` | 中文 = LXGW WenKai（楷体），截图 `cjk-fallback-B-wenkai.png` |
+| A、B 都挂 | `zcool-kuaile` + `lxgwwenkai` | 中文 = Ma Shan Zheng（毛笔楷书），截图 `cjk-fallback-C-mashan.png` |
+
+窄视口（600×900）与演示模式另有两张截图，中文同样是 ZCOOL，行高无需调整。
+
+`<strong>` 的合成粗体在滤镜下没有糊到不可读（正文里的 **232 毫秒**「能用」等强调仍然清楚），
+所以 **没有**加 `font-synthesis-weight: none`。
 
 ## 风险
 

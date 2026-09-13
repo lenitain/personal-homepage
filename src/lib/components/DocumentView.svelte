@@ -310,7 +310,7 @@
 	.failure pre {
 		margin-top: 0.4em;
 		white-space: pre-wrap;
-		font-family: 'Kalam', 'Patrick Hand', 'Yusei Magic', cursive;
+		font-family: var(--font-chalk);
 		font-size: 0.9em;
 		color: var(--orange);
 	}
@@ -414,7 +414,7 @@
 	}
 
 	article :global(code) {
-		font-family: 'Kalam', 'Patrick Hand', 'Yusei Magic', cursive;
+		font-family: var(--font-chalk);
 		background: var(--bg2);
 		color: var(--red);
 		padding: 0.1em 0.35em;

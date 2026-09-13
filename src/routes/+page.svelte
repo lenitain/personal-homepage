@@ -196,7 +196,7 @@
 		width: 100vw;
 		background: var(--bg0);
 		color: var(--fg);
-		font-family: 'Kalam', 'Patrick Hand', 'Yusei Magic', cursive;
+		font-family: var(--font-chalk);
 		position: relative;
 	}
 
