@@ -58,5 +58,14 @@ cp bin/qb-open-python "$ASBUILT/qb-open-python"
 printf '  ok   %-26s as-built=%-9s stripped=%s\n' qb-open-python \
     "$(stat -c%s "$ASBUILT/qb-open-python")" "$(stat -c%s bin/qb-open-python)"
 
+echo "测量工具（不是被测对象）:"
+# bench 和 execmap 是量上面那些二进制的尺子，本身不参与对比。
+# 少建它们的话，latency.sh 会对着一个不存在的 ./bin/bench 报「没有那个文件或目录」，
+# measure.sh 会安静地输出一张 p50/vma/rss 全空的表 —— 那张表看起来像结果，其实什么都没量。
+for tool in bench execmap; do
+    cc -O2 -Wall -Wextra -o "bin/$tool" "$tool.c"
+    printf '  ok   %-26s %s\n' "$tool" "$(stat -c%s "bin/$tool")"
+done
+
 echo
 echo "bin/ now holds the canonical stripped builds."

@@ -1,174 +1,152 @@
-#import "../.course.typ": title, slide, punch, cols, note
+#import "../.course.typ": title, slide, punch, note, cols
 
 #set document(title: "谁来收尸（讲义）")
 
-// 幻灯片版。和文档版的区别不在长短，在*切法*：
-// 文档版按论证推进分段，一张幻灯片只承载一个「讲到这里要让人记住的点」。
-// 所以这里的句子比文档版更短、更断言，细节留给讲的人说。
+// 切法跟文档版不同：一张幻灯片只承载一个「讲到这里要让人记住的点」。
+// 跑出来的结果不进讲义 —— 讲课的时候当场跑，讲义上只留脚本路径。
 
 #slide[
   #title[谁来收尸]
 
-  PID namespace 的四层失败
+  常驻的含义就是*比启动它的东西活得更久* ——
+  这正是它的价值所在，也正是问题所在。
 
-  #note[对应文档版第二章。左边文件树里 `2-who-kills-it.typ` 是完整版。]
+  #note[完整版见左边文件树里的 `3-who-kills-it.typ`。]
 ]
 
 #slide[
-  = 常驻的账
+  = 欠的不是关掉一个进程，是收一整棵树的尸
 
-  - 常驻 = 比启动它的东西活得更久
-  - 一个 qutebrowser 不是一个进程，是*五个*
-  - 所以欠的不是「关掉一个进程」
-  - 是*收一整棵树的尸*
+  一个 qutebrowser 不是一个进程，是五个：本体，加一小群 QtWebEngine 帮手。
+
+  而这件事平时完全看不出来 —— 只有真的注销之后，
+  `ps` 里才会出现一堆没有爹的 renderer。
 ]
 
 #slide[
-  = 这笔账有个很坏的性质
+  = 收尸是个分组问题，不是隔离问题
 
-  平时完全看不出来。
+  #cols[
+    *namespace* 来自隔离世界：BSD jails、Solaris zones、后来的容器。
 
-  - 开发时反复启动、反复关窗，一切正常
-  - 只有注销之后，`ps` 里才发现一堆*没有爹的 renderer*
-  - 而那时候你已经在做别的事了
-]
+    它回答的是「怎么让一个进程看不见另一个进程」。
+  ][
+    *cgroup* 来自资源核算世界：统计和限制一组进程用了多少 CPU 和内存。
 
-#slide[
-  = 我的第一反应
-
-  ```sh
-  unshare --pid --fork
-  ```
-
-  - namespace 的 init 一死，内核回收里面所有进程
-  - 隔离和收尸，一个原语解决两个问题
-]
-
-#slide[
-  = 它不管用
-
-  ```sh
-  $ unshare --pid --fork --mount-proc true
-  unshare: unshare 失败: 不允许的操作
-  ```
-
-  普通用户拿不到 PID namespace。
-
-  *想用它，必须先建一个 user namespace。*
-]
-
-#slide[
-  = 而 user namespace 会改掉你的身份
-
-  ```sh
-  $ unshare --user --pid --fork sh -c "id -u"
-  65534
-  ```
-
-  - 空映射之下，内核拿 overflow uid 顶上
-  - *默认状态是「你没有身份」，不是「你还是你」*
-]
-
-#slide[
-  = 然后输入法没了
-
-  浏览器一切正常：渲染、滚动、视频、快捷键。
-
-  只有一件事不对：*打不出中文*。
-
-  #punch[
-    不是「转换不出来」，是「根本没接上」。
-    这个区别决定了你往哪个方向查。
+    它回答的是「怎么把一组进程当成一个整体对待」。
   ]
+
+  「主进程死了，把剩下的一起带走」—— 答案在第二套里。
 ]
 
 #slide[
-  = D-Bus 拒绝了我们
+  = PID namespace 看起来正好解决这两个问题
 
-  ```sh
-  宿主上                    namespace 里
-  AUTH EXTERNAL 31303030    AUTH EXTERNAL 3635353334
-  → OK                      → REJECTED EXTERNAL
-  ```
-
-  - libdbus 用 `getuid()` 拼凭据 → 65534
-  - broker 用 `SO_PEERCRED` 看内核报的 uid → 1000
-  - 对不上，没有 session bus
+  namespace 的 init 一死，内核回收里面所有进程 ——
+  隔离和收尸，一个原语就够了。
 ]
 
 #slide[
-  = 为什么只有输入法坏？
+  = 普通人拿不到 PID namespace
+
+  只有 root 能单独建 —— 它在设计上就不是给普通用户做生命周期管理用的，
+  是给容器运行时做隔离用的，而容器运行时是 root。
+
+  想走这条路，必须先建一个 user namespace。
+
+  #note[现场跑：`./docs/labs/resident-browser/10-namespace-failure-modes.sh`]
+]
+
+#slide[
+  = user namespace 的默认状态是「你没有身份」
+
+  空映射之下，`uid_map` 是空的，`getuid()` 拿到内核顶上的 overflow uid。
+
+  *要变成你自己，得显式地写一条映射。*
+
+  而「没有身份」对绝大多数程序是无害的 —— 所以这个坑埋得深。
+
+  #note[现场跑：`./docs/labs/resident-browser/10-namespace-failure-modes.sh`]
+]
+
+#slide[
+  = 代价是输入法整块消失
+
+  页面渲染、滚动、视频、快捷键，全都正常。只有一件事不对：*打不出中文。*
+
+  不是候选词不出来，也不是候选框位置错了 —— 是输入法像根本不存在。
+  这个区别决定了你往哪个方向查。
+]
+
+#slide[
+  = 断的不是所有 IPC，是所有需要身份的 IPC
 
   #cols[
     *Wayland*
-    ```sh
-    connect() 成功
-    没有交换任何凭据
-    → 2008 字节
-    ```
+
+    裸 `connect()`。连上就是连上了，
+    没有任何一步需要它知道你是谁。
   ][
     *D-Bus*
-    ```sh
-    要先认证
-    第一件事就是自报身份
-    → 身份已经变了
-    ```
+
+    要先认证。握手的第一件事就是自报身份，
+    而身份恰好被 user namespace 改掉了。
   ]
 
-  namespace 打断的不是所有 IPC，
-  而是*所有需要身份的 IPC*。
+  #note[现场跑：`./docs/labs/resident-browser/10-namespace-failure-modes.sh`]
 ]
 
 #slide[
-  = 更尴尬的是：它连收尸都做不好
+  = 它连收尸这件事本身也没做成
 
-  ```sh
-  $ kill -TERM $wrapper     → 没反应
-  $ kill -KILL $wrapper     → wrapper 死了，里面还活着
-  ```
+  杀掉 wrapper，namespace 里的进程还活着。
 
-  wrapper 和 namespace init 是两个进程，
-  中间*没有任何东西转发信号*。
+  原因很朴素：wrapper 和 namespace init 是*两个进程*，
+  中间没有任何东西转发信号。
 
-  于是补丁按固定顺序到来：`--kill-child` → 监督进程 → `PR_SET_PDEATHSIG`。
+  #note[现场跑：`./docs/labs/resident-browser/10-namespace-failure-modes.sh`]
 ]
 
 #slide[
-  = 把需求重新说一遍
+  = 补丁会一直打下去
 
-  不是「围住这棵树」，是两件具体的事：
+  `--kill-child` → 再套一层监督进程 → 再上 `PR_SET_PDEATHSIG`。
 
-  + 一个 *cgroup* —— 要扫掉哪些进程
-  + *主进程跟踪* —— 有东西注意到主进程死了
+  打到第三个补丁，「简单的 namespace 方案」已经是三个进程深了 ——
+  为生命周期写的代码，比原来的问题本身还多。
 
-  #punch[这两样东西，你的机器上已经有一个现成的实现，从开机起就在跑。]
+  #punch[一个错的工具如果当场就报错，你会立刻换一个；它要是能用，你就会一直在它上面打补丁。]
 ]
 
 #slide[
-  = 那个实现就是 pid 1
+  = 收尸需要的东西只有两样
 
-  但它有个陷阱：niri 给每个 `spawn-sh` 都建了 cgroup，
-  还带着 `KillMode=control-group`。看起来很接近。
+  + 一个 *cgroup* —— 由内核维护的、「到时候要扫掉哪些进程」的那个集合
+  + *主进程跟踪* —— 有东西注意到主进程退出了，不管它是怎么退的
 
-  ```sh
-  scope   MainPID=（空）
-  service MainPID=100938
-  ```
-
-  *scope 没有主进程。* 没有主进程，就没有谁的死亡可以被注意到。
+  这两样东西，你的机器上已经有一个现成的实现，从开机起就在跑：pid 1。
 ]
 
 #slide[
-  = 三种启动方式
+  = 看起来最像的那个不行：scope 没有主进程
 
-  ```sh
-  裸 setsid            → 子进程存活
-  临时 scope           → 子进程存活
-  临时 service         → 子进程已退出
-  ```
+  niri 给每个 `spawn-sh` 都建了独立的 cgroup，还带着 `KillMode=control-group`。
+  这简直就是为了这个需求长的。
 
-  后两者的差别*只有一件事*：
-  这个 cgroup 有没有把某个进程指定为主进程。
+  *但 scope 的 `MainPID` 是空的* —— 没有主进程，就没有谁的死亡可以被注意到。
+
+  #note[现场跑：`./docs/labs/resident-browser/11-cgroup-vs-mainpid.sh`]
+]
+
+#slide[
+  = 三种启动方式，差别只有一件事
+
+  同一棵进程树、同一个 `SIGKILL`：裸 setsid 有孤儿，scope 有孤儿，
+  service 干干净净。
+
+  差别只有一件事：这个 cgroup 有没有把某个进程指定为主进程。
+
+  #note[现场跑：`./docs/labs/resident-browser/11-cgroup-vs-mainpid.sh`]
 ]
 
 #slide[
@@ -178,14 +156,4 @@
 
     隔离原语当不好 supervisor。
   ]
-]
-
-#slide[
-  = 带走这一句
-
-  一个错的工具如果当场就报错，你会立刻换一个。
-
-  *它要是能用，你就会一直在它上面打补丁。*
-
-  \# 这就是为什么「顺手」是最危险的选型理由
 ]

@@ -10,12 +10,11 @@
 *在某门语言里「成为一个进程」要花多少代价。* 这个量平时观测不到，
 因为它总被程序真正在干的事情盖住 —— 只有把程序本身剥到接近零，它才露出来。
 
-所以下面这张表比的不是「哪门语言好」，而是每门语言的运行时在你的代码跑起来之前
-做了什么。
+所以下面比的不是「哪门语言好」，而是每门语言在你的代码跑起来之前做了什么。
 
 = 1. 方法
 
-== 1.1 正确性给基准把关
+== 正确性给基准把关
 
 每一个实现都必须跟已发布的 C 版吐出*逐字节相同*的 IPC 消息，覆盖八个用例：
 两个参数、无参数、空参数、引号与反斜杠、换行与制表符、C0 控制字符、裸 UTF-8、
@@ -23,7 +22,20 @@
 
 一个因为发错字节而变快的启动器，不是启动器。
 
-== 1.2 延迟
+#lab("演示：九个实现，八个用例，逐字节对比（verify.sh）")[
+  ```sh
+  variant                     two-args          no-args           empty-arg         quotes-backslash  newline-tab       control-chars     raw-utf8          long-arg
+  qb-open-asm                 PASS              PASS              PASS              PASS              PASS              PASS              PASS              PASS
+  …                           （八个用例 × 九种实现，全是 PASS，中间七行略）
+  qb-open-zig                 PASS              PASS              PASS              PASS              PASS              PASS              PASS              PASS
+
+  ALL VARIANTS MATCH THE REFERENCE
+  ```
+
+  （完整脚本：`./docs/labs/resident-browser/verify.sh`）
+]
+
+== 延迟
 
 `fork` → `execve` → 干活 → 被回收，用一个 C 写的小工具拿 `clock_gettime` 夹住 `wait4`
 来计时。三轮 × 500 次，绑在同一个核上，报三轮*最小值的中位数*。
@@ -34,63 +46,55 @@
   不绑核的话，同一份代码的读数能差一半，我第一次测出来的结果就是废的。
 ]
 
-== 1.3 一个「底噪」二进制
+== 一个「底噪」二进制
 
 一个静态二进制，函数体只有 `exit_group`。它什么都不干，所以它测出来的就是
 *每一个实现都要付的「被启动」的钱*。
 
-没有它，「300 微秒」这个数没法解释 —— 你不知道那里面有多少是程序，
+没有它，「三百微秒」这个数没法解释 —— 你不知道那里面有多少是程序，
 有多少只是 fork 和 exec。
 
-== 1.4 系统调用与地址空间
+== 系统调用与地址空间
 
 系统调用来自 `strace`。地址空间来自 `execve` 成功那一刻的 `ptrace` 停点 ——
 在程序执行第一条指令之前：加载器已经干完了，程序还没开始。
 
 #note[
   为什么不直接读 `/proc/<pid>/maps`？因为那是个只活零点几毫秒的进程，
-  你轮询不到它。要么让内核把你拦住（ptrace），要么就只能猜。这是「观测会改变
-  被观测对象」在系统编程里最常见的形态：*你得先想办法让它停住。*
+  你轮询不到它。要么让内核把你拦住（ptrace），要么就只能猜。
 ]
 
-= 2. 数字
+= 2. 延迟
 
-单位微秒。「超底噪」减掉那个 224 µs 的底噪二进制。
+#lab("演示：十一个二进制，三轮 × 500 次，绑核报最小值（latency.sh）")[
+  ```sh
+  floor (只 fork+exec+wait，程序本身只 exit):
+    floor-exit                 min=138.8     p50=143.6     p90=163.6
+  对照组:
+    /bin/true (dynamic glibc)  min=470.0     p50=503.8     p90=664.1
+  launcher 变体:
+    qb-open-asm                min=309.9     p50=349.2     p90=480.2
+    qb-open-c-musl-static      min=377.6     p50=427.7     p90=553.9
+    qb-open-c-glibc-static     min=427.7     p50=491.8     p90=671.8
+    qb-open-c-musl-dyn         min=441.5     p50=503.2     p90=684.2
+    qb-open-zig                min=459.5     p50=530.8     p90=684.9
+    qb-open-rust-static        min=511.9     p50=587.9     p90=759.4
+    qb-open-c-glibc-dyn        min=588.1     p50=679.3     p90=867.4
+    qb-open-rust-dyn           min=744.2     p50=861.1     p90=980.2
+    qb-open-python             min=22741.0   p50=23543.1   p90=24923.4
+  ```
 
-#table(
-  columns: (1fr, auto, auto, auto, auto, auto, auto, auto),
-  table.header([实现], [最快], [中位], [超底噪], [syscall], [VMA], [RSS], [体积]),
-  [*（底噪：只 `exit`）*], [224], [246], [—], [2], [8], [12 KB], [8.5 KB],
-  [x86-64 汇编], [*288*], [*332*], [*+63*], [*10*], [*9*], [*12 KB*], [8.9 KB],
-  [C，musl，静态], [317], [424], [+93], [20], [10], [16 KB], [*46 KB*],
-  [C，musl，动态], [393], [541], [+169], [20], [15], [20 KB], [14 KB],
-  [Zig，静态], [442], [562], [+218], [15], [9], [12 KB], [7.9 KB],
-  [C，glibc，静态], [468], [534], [+244], [25], [10], [20 KB], [826 KB],
-  [Rust，静态], [469], [603], [+245], [47], [10], [24 KB], [1.35 MB],
-  [C，glibc，动态], [586], [759], [+362], [42], [15], [20 KB], [15 KB],
-  [Rust，动态], [751], [1053], [+526], [76], [14], [24 KB], [394 KB],
-  [Python 3], [21402], [28532], [+21178], [862], [14], [20 KB], [2.3 KB 脚本],
-)
+  单位微秒。原输出按名字排，这里按最小值重排，行本身没动。
 
-完整的测量工具链在 `docs/labs/resident-browser/`：
+  （完整脚本：`./docs/labs/resident-browser/latency.sh`）
+]
 
-```sh
-./build-all.sh          # 九种实现各构建两遍：原样 + strip
-./verify.sh             # 八个用例，逐字节对比 C 版
-./latency.sh            # 绑核、多轮、报最小值
-./python-split.sh       # 把 Python 的 22 ms 拆开
-./overflow-check.sh     # 在 mount namespace 里探缓冲区边界（见文末）
-./measure.sh out 1000   # syscall 计数 + exec 时刻的地址空间
-```
+== 程序本身的工作量：171 微秒
 
-= 3. 怎么读这张表
+汇编减底噪：309.9 − 138.8。找一个 socket、写一条消息、退出 —— 这就是全部工作。
 
-== 程序本身的工作量：63 微秒
-
-汇编减底噪。找一个 socket、写一条消息、退出 —— 这就是全部工作，
-而在这个尺度上，它相对「存在的代价」是个舍入误差。
-
-那条线以上的部分，*全是语言的运行时在你的代码跑起来之前做的事*。
+在这个尺度上，它相对「存在的代价」是个舍入误差。那条线以上的部分，
+*全是语言的运行时在你的代码跑起来之前做的事*。
 
 #punch[
   为一个热路径启动器选语言，不是在选语法或者表达力，
@@ -102,30 +106,85 @@
 #cols[
   *动态*
   ```sh
-  C, musl     393
-  C, glibc    586
-  Rust        751
+  C, musl     441.5
+  C, glibc    588.1
+  Rust        744.2
   ```
 ][
   *静态*
   ```sh
-  C, musl     317
-  C, glibc    468
-  Rust        469
+  C, musl     377.6
+  C, glibc    427.7
+  Rust        511.9
   ```
 ]
 
-三比零。动态版本要为 `ld.so` 的启动、符号解析、映射库付钱 —— 这在 glibc 的
-syscall 记录里看得一清二楚：8 次 `mmap`，加一堆对着库缓存的 `openat` / `fstat`。
+三比零。动态版本要为 `ld.so` 的启动、符号解析、映射库付钱 ——
+这一点在系统调用记录里看得最清楚：同样一份 `qb-open.c`，动态版 42 次调用，静态版 25 次。
+多出来的 17 次里，有 8 次 `mmap`，其余是在库缓存里翻找的 `openat` / `newfstatat` / `fstat`。
 
-但静态不是免费的，它是*预付*的：glibc 静态是 *826 KB 对 15 KB* —— 56 倍的字节，
-换 118 µs；而 musl 静态是 *46 KB*。
+但静态不是免费的，它是*预付*的：
 
-#note[
-  体积不只是磁盘。exec 时刻的 RSS 几乎没动，但映射的页数动了 ——
-  所以 glibc 静态版在干任何事之前就映射了 1 MB 地址空间。
-  这就是为什么我把「VMA 数量」也放进了表里：它比 RSS 更能说明一个进程「有多重」。
+#lab("演示：九个实现各自的体积（build-all.sh）")[
+  ```sh
+    ok   qb-open-asm                as-built=11248     stripped=8856
+    ok   qb-open-c-musl-static      as-built=53408     stripped=46264
+    ok   qb-open-c-musl-dyn         as-built=16208     stripped=14192
+    ok   qb-open-c-glibc-static     as-built=907576    stripped=825640
+    ok   qb-open-c-glibc-dyn        as-built=17112     stripped=14632
+    ok   qb-open-rust-dyn           as-built=394192    stripped=394184
+    ok   qb-open-rust-static        as-built=1351504   stripped=1351504
+    ok   qb-open-zig                as-built=9008      stripped=7896
+    ok   qb-open-python             as-built=2315      stripped=2315
+  ```
+
+  同样是 glibc：静态版 *826 KB*，动态版 *15 KB* —— 56 倍的字节，换 160 微秒。
+  而 musl 静态只要 *46 KB*，速度还更快。
+
+  （完整脚本：`./docs/labs/resident-browser/build-all.sh`）
 ]
+
+体积不只是磁盘。映射的地址空间也差得很远：`execve` 之后那一刻，
+glibc 静态版已经映射了 1 MB，而 musl 静态版只有 236 KB ——
+这个数在同一份测量的 `vma_kb` 那一列里。
+
+= 3. 每个运行时都写在系统调用记录和地址空间里
+
+#lab("演示：execve 成功那一刻的地址空间，和一整轮的系统调用（measure.sh）")[
+  ```sh
+  qb-open-asm                  p50=766.4     syscalls=10    vma=9    rss=12
+  qb-open-c-glibc-dyn          p50=1266.8    syscalls=42    vma=15   rss=20
+  qb-open-c-glibc-static       p50=979.5     syscalls=25    vma=10   rss=20
+  qb-open-c-musl-dyn           p50=1194.8    syscalls=20    vma=15   rss=20
+  qb-open-c-musl-static        p50=543.4     syscalls=20    vma=10   rss=16
+  qb-open-python               p50=26133.0   syscalls=867   vma=14   rss=20
+  qb-open-rust-dyn             p50=1845.2    syscalls=76    vma=14   rss=24
+  qb-open-rust-static          p50=1123.9    syscalls=48    vma=10   rss=24
+  qb-open-zig                  p50=1033.6    syscalls=15    vma=9    rss=12
+  ```
+
+  `vma` 是 `execve` 之后地址空间里的区间数，`rss` 是那一刻的常驻内存（KB）。
+
+  #note[
+    这一节的 `p50` 比上一节大了一倍多 —— 因为它没有绑核。同一个二进制，
+    绑不绑核差别就有这么大，所以延迟结论只看上一节。
+  ]
+
+  （完整脚本：`./docs/labs/resident-browser/measure.sh`）
+]
+
+这组记录把「运行时」这个词变得具体 —— 你能直接看出每门语言在启动时都在忙什么：
+
+-   *汇编* —— 10 个，而且正好就是那件工作：`openat`、`getdents64`、`socket`、
+    `connect`、`getcwd`、`write`、`close`、`exit`。没有别的
+-   *Zig* —— 15 个，含 `sigaltstack` 和 `prlimit64`。有一点运行时，不多
+-   *C，musl，静态* —— 20 个。多出来的 10 个是 libc 在初始化（`brk`、`mmap`、
+    `set_tid_address`）
+-   *C，glibc，动态* —— 42 个，被 `ld.so` 映射和 stat 库文件占满
+-   *Rust，静态* —— 48 个：六个 `rt_sigaction`、五个 `brk`、三个 `mprotect`
+-   *Python* —— 867 个，形状就是导入机制：138 次 `newfstatat`、101 次 `read`、
+    69 次 `openat`、69 次 `fstat`、62 次 `lseek`。另有 149 次 `clock_gettime`，
+    那是 Python 在给自己的导入计时
 
 == Zig 的进程镜像跟汇编相同
 
@@ -135,30 +194,34 @@ Zig 落在 *9 个 VMA、12 KB RSS*，跟手写汇编*完全一样*，系统调�
 
 == Rust 的启动开销来自 `std`
 
-即使 strip 过，静态 Rust 还是 1.35 MB 和 47 个系统调用，其中六个 `rt_sigaction`、
+即使 strip 过，静态 Rust 还是 1.35 MB 和 48 个系统调用，其中六个 `rt_sigaction`、
 五个 `brk`。那是 `std` 在你的 `main` 之前搭运行时 —— 而这里 `main` 干的事，
 是往一个 socket 写一百个字节。
 
 绝大部分二进制和绝大部分系统调用，都是这个程序*从来不会用到的机器*。
 
-== Python 是汇编版的 74 倍
+= 4. Python 是汇编版的 73 倍
 
 值得拆开看，因为「Python 慢」这句话本身没有信息量：
 
-#table(
-  columns: (1fr, auto, auto),
-  table.header([跑到哪一步], [最快], [增量]),
-  [`python3 -c pass`], [10.6 ms], [—],
-  [`+ import os`], [10.6 ms], [~0],
-  [`+ import socket`], [14.5 ms], [+3.9 ms],
-  [`+ import json`], [18.8 ms], [+8.1 ms],
-  [`+ import json, socket`], [21.9 ms], [+11.3 ms],
-  [完整的启动器], [22.5 ms], [+0.6 ms],
-)
+#lab("演示：一次加一个 import，看每一段各花多少（python-split.sh）")[
+  ```sh
+  python3 -c pass                      min=10917.7    (+0.0)
+  python3 -c import os                 min=10912.6    (+-5.1)
+  python3 -c import socket             min=14956.2    (+4038.5)
+  python3 -c import json               min=19537.7    (+8620.0)
+  python3 -c import json,socket        min=21931.2    (+11013.5)
+  qb-open.py (full)                    min=22670.7    (+11753.0)
+  ```
 
-解释器本身 10.6 ms。导入两个标准库模块花 11.3 ms —— *比解释器还多*，
+  单位微秒。`os` 那一行是负的 —— 差值在噪声以内，说明这个模块本来就在解释器启动路径上。
+
+  （完整脚本：`./docs/labs/resident-browser/python-split.sh`）
+]
+
+解释器本身 10.9 ms。导入两个标准库模块花 11.0 ms —— *比解释器还多*，
 而 `json` 一个就顶两个 `socket`。程序真正干的活 —— 扫一个目录、拼一个小对象、
-写进 socket —— 只花 *0.6 ms*。
+写进 socket —— 只花 *0.7 ms*。
 
 #punch[
   大约 3% 的运行时间是程序被写出来要做的那件事。
@@ -168,46 +231,31 @@ Zig 落在 *9 个 VMA、12 KB RSS*，跟手写汇编*完全一样*，系统调�
 ]
 
 #note[
-  这张表来自它自己那一轮测量，跟上面总表里的 21.4 ms 有约 5% 的出入，
-  是同一台机器上不同轮次的正常噪声。*比值才是要看的东西*，绝对值不可比。
+  这张表来自它自己那一轮测量，跟第 2 节那张延迟表里的 22.7 ms 几乎一样，
+  剩下的是同一台机器上不同轮次的正常噪声。*比值才是要看的东西*，绝对值不可比。
 ]
 
 #ask[
-  如果你只需要「快」，汇编比 C 快 29 µs、小 37 KB。
+  如果你只需要「快」，汇编比 C 版快 68 微秒、小 37 KB。
 
-  这 29 µs 值 400 行手写汇编吗？先自己回答。
+  这 68 微秒值 400 行手写汇编吗？
 ]
-
-= 4. 从 syscall 记录看每个运行时
-
-这组 trace 把抽象变得异常具体 —— 你能直接看出每门语言在启动时都在忙什么：
-
--   *汇编* —— 10 个，而且正好就是那件工作：`openat`、`getdents64`、`socket`、
-    `connect`、`getcwd`、`write`、`close`、`exit`。没有别的
--   *C，musl，静态* —— 20 个。多出来的 10 个是 libc 在初始化（`brk`、`mmap`、
-    `set_tid_address`）
--   *Zig* —— 15 个，含 `sigaltstack` 和 `prlimit64`。有一点运行时，不多
--   *Rust，静态* —— 47 个：六个 `rt_sigaction`、五个 `brk`、三个 `mprotect`
--   *C，glibc，动态* —— 42 个，被 `ld.so` 映射和 stat 库文件占满
--   *Python* —— 862 个，形状就是导入机制：138 次 `newfstatat`、101 次 `read`、
-    69 次 `openat`、69 次 `fstat`、62 次 `lseek`。另有 149 次 `clock_gettime`，
-    那是 Python 在给自己的导入计时
 
 = 5. 我最后选了什么
 
-*C，musl，静态。* 46 KB，317 µs，20 个系统调用，没有动态加载器，
+*C，musl，静态。* 46 KB，377.6 微秒，20 个系统调用，没有动态加载器，
 整个构建是一条 `musl-gcc -static` 命令。
 
 剩下那几个实现存在，是因为我想让这个对比诚实，不是因为维护它们是件好事。
 
-排名的一句话总结：汇编比 C 版小 37 KB、快 29 µs，代价是 400 行手写汇编去换。
+排名的一句话总结：汇编比 C 版小 37 KB、快 68 微秒，代价是 400 行手写汇编去换。
 Zig 能用一门你真写得动的语言拿到汇编的进程像，如果从零开始我会选它 ——
 代价是把构建钉死在某个具体的 Zig 版本上，而对这么小的一个程序来说，
 这个代价换不过一个几十年都稳定的编译器。
 
 = 6. 写五个实现，抓出一个真 bug
 
-这一段是整个系列里我最想留下的部分，因为*它不是设计出来的，是撞出来的*。
+这一段不是设计出来的，是写第二份实现的时候撞出来的。
 
 == 原因
 
@@ -218,18 +266,29 @@ C 版用 `snprintf` 拼 JSON，然后把返回值加进写入偏移量。而 `sn
 
 == 后果不是理论上的
 
-当单个参数达到约 8.1 KB 以上：
+#lab("演示：同一个启动器，参数从 8000 走到 8300（overflow-check.sh）")[
+  ```sh
+  n        rc    bytes_sent   fallback_trace
+  8000     0     8149         -
+  8042     0     8191         -
+  8043     0     8192         -
+  8044     0     0            execve envp=0x7fffa02ccb90
+  8050     0     0            execve envp=0x7fff2c8f1d70
+  8100     0     0            execve envp=0x7ffc5b873830
+  8300     0     0            execve envp=0x7fff53598930
 
--   多数情况下启动器越过缓冲区瞎写，`write()` 读到未映射的页、失败 ——
-    于是 fallback *冷启动了一整个真浏览器*，而不是给常驻实例发消息
--   在 8124–8130 字节这个狭窄窗口里，它把 `environ` 写成了 `,"cwd":` 的 ASCII ——
-    于是 fallback 的 `execve` 直接 `EFAULT`，启动器什么都没干就退出 1
+  边界        最后一个还能发出去的长度 —— 8043 字节（socket 收到 8192 字节，rc=0）
+  第一个兜底  从 8044 起，trace 里多出一条 execve —— 它悄悄换了个浏览器起来
+  退出码      整张表里出现过 0 —— 从头到尾没有一行在报错
+  ```
 
-== 实验：探这个边界
+  越界之后它不崩溃、不报错，而是*行为变了*：快路径发不出去，于是走 fallback，
+  冷启动一整个真浏览器。用户看到的现象是「怎么突然变慢了」。
 
-```sh
-./overflow-check.sh ~/.local/bin/scripts/qb-open
-```
+  触发条件是一个大约 8 KB 的参数 —— 在这条路径上，那就是一个很长的 URL。
+
+  （完整脚本：`./docs/labs/resident-browser/overflow-check.sh`）
+]
 
 #note[
   ⚠️ 这个脚本*必须*在私有 mount namespace 里跑，它把 `/bin/true` 绑到
@@ -238,18 +297,6 @@ C 版用 `snprintf` 拼 JSON，然后把返回值加进写入偏移量。而 `sn
   因为如果越界写出来的字节恰好构成一个合法的指针数组，`execve` 是*能成功的* ——
   那就真的会拉起用户的浏览器。这个安全网不是谨慎，是这个 bug 的失败模式决定的。
 ]
-
-修复前后的对比：
-
-#table(
-  columns: (auto, 1fr, 1fr),
-  table.header([参数长度], [修复前], [修复后]),
-  [`8000`], [快路径直发], [快路径直发],
-  [`8100`], [fallback：静默冷启动浏览器], [fallback：干净冷启动],
-  [`8124`], [fallback：`EFAULT`，退出 1], [fallback：干净冷启动],
-  [`8130`], [fallback：`EFAULT`，退出 1], [fallback：干净冷启动],
-  [`8300`], [fallback：静默冷启动浏览器], [fallback：干净冷启动],
-)
 
 == 这个 bug 为什么之前没被发现
 

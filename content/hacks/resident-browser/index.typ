@@ -46,7 +46,7 @@ qutebrowser 启动要大约 1.2 秒。窗口先出来，然后页面才出来。
 
 +   *我的 qutebrowser 启动好慢，我该怎么办？*
     -   先看清「跑一个程序」在 Linux 上是什么意思：fork 复制、execve 换内容
-    -   内核按段表把 `PT_LOAD` 搬进地址空间 —— VMA 就是这么来的
+    -   内核按段表把 `PT_LOAD` 映射进地址空间 —— VMA 就是这么来的
     -   有 `PT_INTERP` 的文件自己跑不起来，内核启动的其实是 `ld.so`
     -   然后拿这套机制去体检普通的 qutebrowser：它是个 970 字节的 Python 脚本，
       光导入模块就要 90 ms
@@ -86,9 +86,9 @@ qutebrowser 启动要大约 1.2 秒。窗口先出来，然后页面才出来。
 
 = 5. 实验器材
 
-/ `05-namespace-failure-modes.sh`: PID namespace 的三个失败面
-/ `06-cgroup-vs-mainpid.sh`: scope 和 service 差在哪
-/ `07-resident-memory.sh`: 常驻到底占多少内存
+/ `10-namespace-failure-modes.sh`: PID namespace 的三个失败面
+/ `11-cgroup-vs-mainpid.sh`: scope 和 service 差在哪
+/ `12-resident-memory.sh`: 常驻到底占多少内存
 / `overflow-check.sh`: C 版缓冲区溢出的边界
 / `launchers/`: 九个实现，五种语言
 / `build-all.sh`: 全部构建 + 测量
