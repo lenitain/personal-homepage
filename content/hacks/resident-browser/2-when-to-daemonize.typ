@@ -1,4 +1,5 @@
 #import ".course.typ": title, ask, lab, note, oops, punch
+#import ".syllabus.typ": chapterRef
 
 #set document(title: "什么样的程序值得常驻")
 
@@ -85,17 +86,18 @@ Python 解释器、Qt、Chromium 引擎、adblock 规则、profile。不管你�
   $ ./09-zygote-prefork.sh
     A 路 fork   40 次任务共花   20 ms   构造函数跑了   1 遍
     B 路 exec   40 次任务共花  192 ms   构造函数跑了  40 遍
-
-    B 路比 A 路慢 9.6 倍；多出来的 39 遍构造函数，就是动态链接器那四步：
-    找库、映射、重定位、调 init（第五章的 08 把这笔账打了出来）—— 它们只跟「这份程序映像」有关，
-    跟这次任务要干什么毫无关系。fork 不 exec，子进程拿到的是
-    父进程那份已经建好的地址空间（写时复制，不真的拷内存），那四步一次都不用再做。
-
-    真实系统上 Chromium / QtWebEngine 就是这么干的：zygote 手里 227 个 .so，
-    renderer 从它 fork 出来，比它多 0 个 —— 一个库都没有重新加载。
   ```
 
-  第一章体检二里那两个 zygote 模板进程，作用就是这个：它们不是被 `exec` 出来的，
+  B 路比 A 路慢 9.6 倍。多出来的那 39 遍构造函数，就是动态链接器那四步 ——
+  找库、映射、重定位、调 init（#chapterRef("4.") 的 08 把这笔账打了出来）。
+  它们只跟「这份程序映像」有关，跟这次任务要干什么毫无关系：
+  fork 不 exec，子进程拿到的是父进程那份已经建好的地址空间（写时复制，
+  不真的拷内存），那四步一次都不用再做。
+
+  真实系统上 Chromium / QtWebEngine 就是这么干的：zygote 手里 227 个 .so，
+  renderer 从它 fork 出来，比它多 0 个 —— 一个库都没有重新加载。
+
+  序里体检二的那两个 zygote 模板进程，作用就是这个：它们不是被 `exec` 出来的，
   是从一个已经装好引擎的进程里 `fork` 出来的。
 
   #note[
@@ -112,7 +114,7 @@ Python 解释器、Qt、Chromium 引擎、adblock 规则、profile。不管你�
 = 3. 同一个模式，不同的管道
 
 Ghostty 对终端做的是同一件事：一个常驻进程，加上很快的客户端，新窗口由 IPC 创建
-（见 [Ghostty 的 systemd 集成](https://ghostty.org/docs/linux/systemd)）。
+（见 #link("https://ghostty.org/docs/linux/systemd")[Ghostty 的 systemd 集成]）。
 
 它内部看起来跟我做的事很不一样 —— 走的是 D-Bus 和 systemd，而我是裸 Unix socket ——
 但形状完全相同。因为这个形状是由判据决定的，不是由口味决定的。

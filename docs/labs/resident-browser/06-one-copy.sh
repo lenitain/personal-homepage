@@ -49,6 +49,8 @@ meminfo() {
     awk '/^MemTotal:/{t=$2} /^MemAvailable:/{a=$2} /^Cached:/{c=$2}
          END { printf "%d %d\n", (t-a)/1024, c/1024 }' /proc/meminfo
 }
+# 注意 printf 末尾那个 \n 是必须的：read 读到不带换行的结尾会返回非 0，
+# 在 set -e 下整个脚本就此退出（而且什么都不打印，看着像没跑）。
 
 # 这些进程自己报的常驻内存，加起来（kB）
 reported() {
@@ -169,11 +171,12 @@ cat <<EOF
   $N 个进程都读完     整机已用 $(gib $(( all_used * 1024 ))) GiB   页缓存 $(gib $(( all_cached * 1024 ))) GiB   各报 $(gib "$one_reported") GiB，加起来 $(gib "$all_reported") GiB
 
   页缓存从 $(gib $(( base_cached * 1024 ))) 涨到 $(gib $(( one_cached * 1024 ))) 的那 $(gib $(( (one_cached - base_cached) * 1024 )) ) GiB，是库被读进来 —— *一份*。
-  再加 $(( N - 1 )) 个进程各自读完，页缓存一点没涨；可这 $N 个进程自己报的加起来是 $(gib "$all_reported") GiB。
-  报的是「约定」的和，不是物理内存 —— 同一批物理页，被 $N 个进程各映射了一次。
+  第一个进程已经把整个库读进来了，所以后面 $(( N - 1 )) 个进程各读一遍时，页缓存一点没涨。
+  可这 $N 个进程自己报的加起来是 $(gib "$all_reported") GiB：报的是页表项的和，不是物理内存 ——
+  同一批物理页，被 $N 个进程各映射了一次。
 
   这用在哪：「只付一次」的物质基础就是这一条 —— 内容只进来一份，谁要用，谁映射它。
-  fork 便宜也是同一条：它复制的正是这堆约定，不是约定指向的物理页。
+  fork 便宜也是同一条：它复制的正是这一堆页表项，不是页表项指向的物理页。
 
   （$N 个 usebig 都停在 pid $first_pid 起，想自己看：grep -E 'VmSize|VmRSS' /proc/$first_pid/status）
 EOF

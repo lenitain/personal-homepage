@@ -49,7 +49,8 @@ export const MARKDOWN_ISMS = {
 	'**': 'typst 的粗体是单星号 `*粗体*`，双星号会报 "no text within stars"',
 	'##': 'typst 的标题是等号 `=`，`#` 是代码入口，写 `##` 会直接编译失败',
 	'>': 'typst 的引用块是 `#quote(block: true)[...]`，`>` 会原样渲染成字面字符',
-	'|': 'typst 没有 markdown 表格语法，表格要写 `#table(...)`，`|` 会原样渲染'
+	'|': 'typst 没有 markdown 表格语法，表格要写 `#table(...)`，`|` 会原样渲染',
+	'[]()': 'typst 的链接是 `#link("url")[文字]`，markdown 的 `[文字](url)` 会整段原样渲染'
 } as const;
 
 export type MarkdownIsm = keyof typeof MARKDOWN_ISMS;
@@ -179,6 +180,7 @@ function callsPrimitive(code: string, primitive: string): boolean {
  * - `##` 只认行首（正文里提到 `##` 是正常的，比如这句注释）
  * - `>` 只认行首（`->`、`>=` 这类符号不该误报）
  * - `|` 只认行首且行内还有第二个 `|`（markdown 表格的形状）
+ * - `[文字](url)` 认整条链接，且括号里要含 `:` 或 `/`（见 `MARKDOWN_LINK`）
  */
 export function findMarkdownIsms(source: string): MarkdownIsmHit[] {
 	const hits: MarkdownIsmHit[] = [];
@@ -211,7 +213,47 @@ export function findMarkdownIsms(source: string): MarkdownIsmHit[] {
 		if (/^#{2,}/.test(trimmed)) push('##');
 		if (/^>\s/.test(trimmed)) push('>');
 		if (/^\|.*\|/.test(trimmed)) push('|');
+
+		// 链接要在**抹掉行内代码之前**的版本上判：markdown 链接的文字几乎总带反引号
+		// （`` [`qb-open`](url) ``），而 `stripCommentsAndStrings` 会把反引号对之间的
+		// 内容整段抹掉 —— 用它判就永远命中不了。注释仍然要排除。
+		if (findMarkdownLinks(raw).length > 0) push('[]()');
 	}
 
 	return hits;
 }
+
+/**
+ * 一份 typst 源码里所有**写成 markdown 的链接**。
+ *
+ * 只认「行注释之外」的部分，而且刻意做成纯函数：判定规则能被单测钉住，
+ * 而不是埋在 `findMarkdownIsms` 的循环里。
+ *
+ * ## 为什么先做占位替换
+ *
+ * 「行注释从哪儿开始」在 typst 里不能靠找 `//` 来判断 —— URL 里就有（`https://`）。
+ * 但只找 `://` 又会漏掉 `#link("//example.com")` 这种。所以先把**反引号里的
+ * 行内代码**和**双引号里的字符串**换成占位符（注释不会出现在这两者里面），
+ * 这时剩下的 `//` 就只可能是注释了。
+ */
+export function findMarkdownLinks(source: string): string[] {
+	return source
+		.split('\n')
+		.flatMap((line) => stripComment(line).match(MARKDOWN_LINK) ?? []);
+}
+
+/**
+ * 去掉行注释。
+ *
+ * 判定注释从哪儿开始不能靠找 `//` —— URL 里就有（`https://`），
+ * 一刀切下去剩下的半截链接再也匹配不上。取「前面是空白或行首的那个 `//`」：
+ * 这正是 typst 注释的写法（`// 说明`），而 URL 里的 `//` 前面是 `:`。
+ */
+function stripComment(line: string): string {
+	const comment = /(^|\s)\/\//.exec(line);
+	if (!comment) return line;
+	// 保留那个分隔用的空白之前的部分
+	return line.slice(0, comment.index + comment[1].length);
+}
+
+const MARKDOWN_LINK = /\[[^\[\]]+\]\([^()\s]*(?::|\/)[^()\s]*\)/g;

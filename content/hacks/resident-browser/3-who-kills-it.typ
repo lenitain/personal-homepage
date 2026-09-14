@@ -1,10 +1,11 @@
 #import ".course.typ": title, ask, lab, oops, note, punch, cols
+#import ".syllabus.typ": chapterRef
 
 #set document(title: "谁来释放资源")
 
 #title[谁来释放资源]
 
-上一章让浏览器变成了一个常驻进程。这一章要还的，是那笔当场欠下的账。
+#chapterRef("1.") 让浏览器变成了一个常驻进程。这一章要还的，是那笔当场欠下的账。
 
 常驻的含义就是*比启动它的东西活得更久* —— 这正是它的价值所在，也正是问题所在。
 一个 qutebrowser 不是一个进程，是五个：本体，加一小群 QtWebEngine 帮手，

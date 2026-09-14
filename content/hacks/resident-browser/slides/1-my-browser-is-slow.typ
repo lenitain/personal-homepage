@@ -11,7 +11,7 @@
 #slide[
   #title[我的 qutebrowser 启动好慢，我该怎么办？]
 
-  qutebrowser 启动要 1.2 秒。一天开几十次，每次都等这 1.2 秒。
+  qutebrowser 启动要 1.2 到 1.7 秒。一天开几十次，每次都等这一秒多。
 
   *该从哪里入手呢？*
 ]
@@ -57,11 +57,12 @@
   + *其他进程也在用* —— 比如 libc.so，全系统几十个进程共用同一份
   + *谁都没在用* —— 映射了，但还没碰过；碰的那一刻才去磁盘上取
 
-  用一个例子来证明一定存在动态链接库复用机制。
+  第二种不用造例子，机器上此刻就发生着 —— 六个进程各映射一份 libc，
+  各自的 Pss 相加 *0.2 MiB*（库文件本身 2.3 MiB）：同一批页，物理上只有一份。
 
-  #punch[回头看 `fork`：写时拷贝复制的是这一堆约定，不是约定指向的物理页。]
+  #punch[回头看 `fork`：写时拷贝复制的是这一堆页表项，不是页表项指向的物理页。]
 
-  #note[现场跑：`./docs/labs/resident-browser/06-one-copy.sh`]
+  #note[现场跑：`./docs/labs/resident-browser/06b-libc-shared.sh`]
 ]
 
 #slide[
@@ -82,7 +83,7 @@
 #slide[
   = 具体看看 qutebrowser 的启动过程
 
-  回到最初的问题：那 1.2 秒花在哪。
+  回到最初的问题：那 1.2 到 1.7 秒花在哪。
 
   测量 qutebrowser 从 shell 里敲的那个命令，到出现窗口的全部过程。
 ]
@@ -126,19 +127,19 @@
 ]
 
 #slide[
-  = 四：把整个 1.2 秒分开看
+  = 四：把整个启动过程分开看
 
   给全程打时间戳，找几个*可以外部观测*的界标 —— 敲下命令、
   第一个 Qt 的库被打开、第一次连上合成器。三个时刻一减，
-  这一秒就分成两段了。
+  这一次的 1.66 秒就分成两段了。
 
-  #punch[前 233 毫秒是 Python，后 1014 毫秒是 Qt 和 QtWebEngine。]
+  #punch[前 309 毫秒是 Python，后 1350 毫秒是 Qt 和 QtWebEngine。]
 
   #note[现场跑：`./docs/labs/resident-browser/13-qutebrowser-checkup.sh`]
 ]
 
 #slide[
-  = 那 1014 毫秒具体在干什么
+  = 那 1350 毫秒具体在干什么
 
   同一时间窗的系统调用：`openat` 932、`read` 1508、`newfstatat` 1304、`mmap` 1007
 
@@ -156,7 +157,7 @@
 
   + 一个程序从「文件」变成「跑起来的进程」，中间有一整套固定的流程
   + qutebrowser 是这套流程的一个实例：970 字节的 Python 脚本
-  + 它的 1.25 秒 = 233 毫秒 Python + 1014 毫秒 Qt/QtWebEngine
+  + 它这一次的 1.66 秒 = 309 毫秒 Python + 1350 毫秒 Qt/QtWebEngine
 
   *还不知道：* 这一秒里有没有哪几段是完全可以共享的。
 

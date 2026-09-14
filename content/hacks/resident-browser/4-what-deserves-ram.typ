@@ -1,10 +1,11 @@
 #import ".course.typ": title, lab, note, oops, punch
+#import ".syllabus.typ": chapterRef
 
 #set document(title: "什么该留在 RAM")
 
 #title[什么该留在 RAM]
 
-上一章把「谁负责关掉它」交给了 pid 1。这一章是开销的问题。
+#chapterRef("2.") 把「谁负责关掉它」交给了 pid 1。这一章是开销的问题。
 
 浏览器常驻之后，一个很自然的下一步是：把它的数据也放进 RAM。
 但浏览器手里那几样数据，该待的地方各不相同：

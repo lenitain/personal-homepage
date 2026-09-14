@@ -1,4 +1,5 @@
 #import ".course.typ": title, ask, lab, oops, note, punch, cols
+#import ".syllabus.typ": chapter
 
 #set document(title: "快路径用什么写")
 
@@ -236,8 +237,10 @@ glibc 静态版已经映射了 1 MB，而 musl 静态版只有 236 KB ——
   `vma` 是 `execve` 之后地址空间里的区间数，`rss` 是那一刻的常驻内存（KB）。
 
   #note[
-    这一节的 `p50` 比上一节大了一倍多 —— 因为它没有绑核。同一个二进制，
-    绑不绑核差别就有这么大，所以延迟结论只看上一节。
+    这一节的 `p50` 比上一节大了一倍多，别当成两个结论 —— 两支脚本量的不是一回事：
+    `latency.sh` 绑核、报最小值，`measure.sh` 不绑核、报 p50。
+    同一个二进制在两种口径下差多少，看 `qb-open-c-musl-static` 就够了：
+    上一节 *377.6*，这里 *543.4*。延迟结论只看上一节，这一节看的是系统调用和地址空间。
   ]
 
   （完整脚本：`./docs/labs/resident-browser/measure.sh`）

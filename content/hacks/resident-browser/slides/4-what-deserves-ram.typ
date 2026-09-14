@@ -1,4 +1,5 @@
 #import "../.course.typ": note, punch, slide, title
+#import "../.syllabus.typ": chapterRef
 
 #set document(title: "什么该留在 RAM（讲义）")
 
@@ -9,7 +10,7 @@
 #slide[
   #title[什么该留在 RAM]
 
-  释放资源的人定了。这一章是开销的问题。
+  #chapterRef("2.") 把释放资源的人定了。这一章是开销的问题。
 ]
 
 #slide[

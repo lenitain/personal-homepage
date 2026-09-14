@@ -1,18 +1,19 @@
 #import ".course.typ": title, ask, lab, oops, note, punch, cols
+#import ".syllabus.typ": preface, chapters, chapterRef, prefaceRef, contents
 
 #set document(title: "一个已经开着的浏览器")
 
 #title[一个已经开着的浏览器]
 
-qutebrowser 启动要大约 1.2 秒。窗口先出来，然后页面才出来。它不是个慢程序，
-但 1.2 秒足够让你每次都注意到 —— 一天二十次。
+qutebrowser 启动要 1.2 到 1.7 秒。窗口先出来，然后页面才出来。它不是个慢程序，
+但这一秒多足够让你每次都注意到 —— 一天二十次。
 
 这门课记录的是把它压到 *232 毫秒*的全过程，以及代价到底是什么。
 里面没有一处是在让浏览器本身变快。
 
 = 1. 这门课在教什么
 
-表面上是四章关于一个浏览器的笔记。实际上它反复在做同一件事：
+表面上是关于一个浏览器的笔记 —— *序*加*四章*。实际上它反复在做同一件事：
 
 #punch[
   拿到一个「顺手」的机制，然后问它原本是为哪个问题造的。
@@ -25,16 +26,19 @@ qutebrowser 启动要大约 1.2 秒。窗口先出来，然后页面才出来。
 
 == 另一个反复出现的主题
 
--   我凭印象把常驻开销记成「700 MB 到 1 GB」，量出来是 129 MiB（第一章）
--   我以为「多语言实现」的价值在对比表，实际价值在它抓出来的一个内存越界写（第四章）
--   一个实验「跑通了」但其实完全无效，因为 `$$` 被 systemd 展开成了字面 `$`（第二章）
+三次，我都是拿脑子里的模型代替了观测：
 
-这三个不是独立的事故，是同一种失误的三个变体：*用自己脑子里的模型代替观测*。
+-   常驻开销我记成「700 MB 到 1 GB」，量出来是 129 MiB（#chapterRef("1.")）
+-   我以为「多语言实现」的价值在对比表，实际价值在它抓出来的一个内存越界写（#chapterRef("4.")）
+-   一个实验「跑通了」但其实完全无效，因为 `$$` 被 systemd 展开成了字面 `$`（#chapterRef("2.")）
+
+这三个不是独立的事故，是同一种失误的三个变体。
 所以每一章里凡是能跑的东西都跑了，输出直接贴在里面。
 
 = 2. 课程信息
 
--   *形态*：四章，中文正文 + 英文术语，用 [typst](https://typst.app/) 写
+-   *形态*：#prefaceRef() 是地基，不计入章数；正文#chapters().len() 章。
+    中文正文 + 英文术语，用 #link("https://typst.app/")[typst] 写
 -   *前置知识*：会读 C，知道进程是什么，用过命令行
     -   不需要写过内核模块，不需要读过 Linux 源码
 -   *实验*：全部可复现，脚本在 `docs/labs/resident-browser/`
@@ -44,26 +48,7 @@ qutebrowser 启动要大约 1.2 秒。窗口先出来，然后页面才出来。
 
 = 3. 章节目录
 
-+   *我的 qutebrowser 启动好慢，我该怎么办？*
-    -   先看清「跑一个程序」在 Linux 上是什么意思：fork 复制、execve 换内容
-    -   地址空间是一列区间：映射不等于占用，同一份内容可以在几十个进程之间共用
-    -   然后拿这套机制去体检普通的 qutebrowser：它是个 970 字节的 Python 脚本，
-      光导入模块就要 90 ms
-+   *什么样的程序值得常驻*
-    -   为什么值得常驻的不是「慢的程序」，是「开销可分离的程序」
-    -   以及我把它记成 1 GB、实际只有 140 MiB 的那个数字
-+   *谁来释放资源*
-    -   生命周期的另一半
-    -   为什么 PID namespace 是错的工具
-    -   以及我怎么把自己的输入法搞丢了
-+   *什么该留在 RAM*
-    -   浏览器的历史、cookie、两份缓存，各自该待在哪
-    -   overlayfs、shader cache、HTTP cache 各自该怎么处理
-+   *快路径用什么写*
-    -   同一个启动器，五种语言九个实现
-    -   为什么动态链接的程序每次启动都要先跑一遍动态链接器（`ld.so`）
-    -   量延迟、系统调用、地址空间、体积
-    -   外加写它们时撞出来的一个缓冲区溢出
+#contents()
 
 = 4. 怎么读
 
@@ -73,7 +58,7 @@ qutebrowser 启动要大约 1.2 秒。窗口先出来，然后页面才出来。
 +   *演示* —— 当场把它跑出来看，输出直接贴在里面
 +   *数字* —— 所以那个数字是什么意思
 
-凡是能跑的都跑了。*这一章里的每个结论，都对应一个你可以自己重跑一遍的脚本。*
+凡是能跑的都跑了。*每一个结论，都对应一个你可以自己重跑一遍的脚本。*
 
 所以你会看到很多「先停一下」，那是留给你自己先回答的。
 
@@ -86,12 +71,8 @@ qutebrowser 启动要大约 1.2 秒。窗口先出来，然后页面才出来。
 
 = 5. 实验器材
 
-/ `10-namespace-failure-modes.sh`: PID namespace 的三个失败面
-/ `11-cgroup-vs-mainpid.sh`: scope 和 service 差在哪
-/ `12-resident-memory.sh`: 常驻到底占多少内存
-/ `overflow-check.sh`: C 版缓冲区溢出的边界
-/ `launchers/`: 九个实现，五种语言
-/ `build-all.sh`: 全部构建 + 测量
+二十七支脚本加一套九个实现的启动器，全在 `docs/labs/resident-browser/`。
+每一章贴的输出都出自它们，脚本和章节的对照表在那一层的 `README.md`。
 
 两条使用须知，都是踩出来的：
 
@@ -105,11 +86,17 @@ qutebrowser 启动要大约 1.2 秒。窗口先出来，然后页面才出来。
   columns: (1fr, auto, auto),
   table.header([], [之前], [之后]),
   [打开一个页面], [1227 ms], [232 ms],
-  [常驻成本], [0], [140 MiB],
+  [常驻成本], [0], [129 MiB],
   [进程树], [1], [2–5],
-  [启动器开销], [—], [317 µs],
+  [启动器开销], [—], [377.6 µs],
   [生命周期保证], [无], [pid 1 级],
 )
+
+其中两行有口径，别跟别处的数字混着看：
+
+-   *常驻成本*是零窗口、空 profile 的 `MemoryCurrent`（#chapterRef("1.")，演示 12）
+-   *启动器开销*是 `latency.sh` 绑核三轮 × 500 次的*最小值*（#chapterRef("4.")）；
+    同一支脚本在 `measure.sh` 口径下是 p50 543 µs —— 两处数不一样是因为量法不一样
 
 #punch[
   把开销恒定的那部分保温，
@@ -121,14 +108,14 @@ qutebrowser 启动要大约 1.2 秒。窗口先出来，然后页面才出来。
 
 全都在我的 dotfiles 里：
 
--   [qutebrowser 配置](https://github.com/lenitain/dotfiles/blob/main/dotfiles/.config/qutebrowser/config.py) —— 缓存相关的决定都写在注释里
--   [`qb-server`](https://github.com/lenitain/dotfiles/blob/main/dotfiles/.local/bin/scripts/qb-server) —— 打了补丁、零窗口也不退出的 qutebrowser
--   [`qb-open`](https://github.com/lenitain/dotfiles/blob/main/dotfiles/.local/bin/scripts/qb-open.c) —— C 写的启动器，191 行
--   [`qb-server.service`](https://github.com/lenitain/dotfiles/blob/main/dotfiles/.config/systemd/user/qb-server.service) —— 交出去的生命周期
+-   #link("https://github.com/lenitain/dotfiles/blob/main/dotfiles/.config/qutebrowser/config.py")[qutebrowser 配置] —— 缓存相关的决定都写在注释里
+-   #link("https://github.com/lenitain/dotfiles/blob/main/dotfiles/.local/bin/scripts/qb-server")[`qb-server`] —— 打了补丁、零窗口也不退出的 qutebrowser
+-   #link("https://github.com/lenitain/dotfiles/blob/main/dotfiles/.local/bin/scripts/qb-open.c")[`qb-open`] —— C 写的启动器，191 行
+-   #link("https://github.com/lenitain/dotfiles/blob/main/dotfiles/.config/systemd/user/qb-server.service")[`qb-server.service`] —— 交出去的生命周期
 
 = 8. 从哪开始
 
-如果只读一章，读*《谁来释放资源》*。那一章的实验最完整，
+如果只读一章，读*#chapterRef("2.")*。那一章的实验最完整，
 而且它教的是一次*调试*，不是一个结论。
 
 否则就按左边文件树里的顺序往下走。

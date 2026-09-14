@@ -120,6 +120,28 @@ describe('findMarkdownIsms', () => {
 		expect(findMarkdownIsms('| 甲 | 乙 |').map((h) => h.kind)).toEqual(['|']);
 	});
 
+	/**
+	 * 这条踩过：课件从 markdown 改写成 typst 之后，参考链接还是 `[文字](url)` 的写法。
+	 * typst 不认，于是整段以字面字符出现在页面上，只在编译日志里留一条
+	 * "no text within stars" —— 页面看着像「链接样式没生效」，不像错误。
+	 */
+	test('markdown 链接：[文字](url) 要写成 #link("url")[文字]', () => {
+		expect(findMarkdownIsms('用 [typst](https://typst.app/) 写').map((h) => h.kind)).toEqual([
+			'[]()'
+		]);
+		expect(findMarkdownIsms('见 [文档](/docs/x.md)').map((h) => h.kind)).toEqual(['[]()']);
+		expect(findMarkdownIsms('- [`qb-open`](https://example.com/a/b.c) —— 启动器').map((h) => h.kind)).toEqual([
+			'[]()'
+		]);
+	});
+
+	test('typst 自己的链接写法不算、普通方括号不算', () => {
+		expect(findMarkdownIsms('#link("https://typst.app/")[typst] 写')).toEqual([]);
+		expect(findMarkdownIsms('列表项 [*甲*]，下一项 [*乙*]')).toEqual([]);
+		expect(findMarkdownIsms('items.map(x => [是 #x])')).toEqual([]);
+		expect(findMarkdownIsms('#list(..xs.map(v => [#v]))')).toEqual([]);
+	});
+
 	/** 代码围栏里的这些字符是终端输出和 diff，原样保留才是对的。 */
 	test('代码块里的一律不算', () => {
 		const source = ['```sh', '## 这是 shell 注释', '> 这是提示符', '| 这是管道 |', 'a**b', '```'].join('\n');
