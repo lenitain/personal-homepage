@@ -7,7 +7,7 @@
 # 形态说明：同一句 echo 跑两次，只有一处不同 —— 第二次在 exec 之前把标准输出
 # 改成了文件。跑完把两次的去向并排列出来。
 #
-# 对应《我的 qutebrowser 启动好慢》第 1 节「一个进程是怎么启动的」。
+# 对应《我的 qutebrowser 启动好慢》第 1 节「为什么要分成两步」。
 set -euo pipefail
 
 cd "$(dirname "$(readlink -f "$0")")"

@@ -27,8 +27,8 @@
 | `04-address-space.sh` | 我的 qutebrowser 启动好慢 | 全系统地址空间加起来 6 TiB，物理内存 15 GiB |
 | `05-mmap-not-occupied.sh` | 我的 qutebrowser 启动好慢 | 映射 1 GiB 物理内存不涨；碰多少涨多少 |
 | `06-one-copy.sh` | 我的 qutebrowser 启动好慢 | 100 个进程各读一遍 2 GiB 的库，物理内存里只有一份 |
-| `07-elf-loading.sh` | 我的 qutebrowser 启动好慢 | 段表与地址空间一一对应；execve 之后内核和链接器发的系统调用；静态 vs 动态的启动开销 |
-| `08-dynamic-loader.sh` | 我的 qutebrowser 启动好慢 | 找库 / 重映射 / 重定位 / 调 init；惰性绑定 vs `-z now` |
+| `07-elf-loading.sh` | 快路径用什么写 | 段表与地址空间一一对应；execve 之后内核和链接器发的系统调用；静态 vs 动态的启动开销 |
+| `08-dynamic-loader.sh` | 快路径用什么写 | 找库 / 重映射 / 重定位 / 调 init；惰性绑定 vs `-z now` |
 | `09-zygote-prefork.sh` | 我的 qutebrowser 启动好慢 | fork 继承 vs exec 重来；真实 QtWebEngine zygote |
 | `10-namespace-failure-modes.sh` | 谁来释放资源 | 非特权建 PID namespace、空 uid_map、杀 wrapper |
 | `11-cgroup-vs-mainpid.sh` | 谁来释放资源 | scope 与 service 的 MainPID 差异；三种启动方式的资源释放对比 |

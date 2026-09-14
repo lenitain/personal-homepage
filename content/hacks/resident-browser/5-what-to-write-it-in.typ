@@ -101,6 +101,76 @@
   而是在选「什么东西会跟着你一起启动」。
 ]
 
+== 跟着一起启动的，是动态链接器
+
+一个可执行文件如果用了别人写好的库（`printf()` 之类），它自己就跑不起来：
+文件开头有一张表，其中一项写着「我需要一个解释器」。内核把地址空间建好之后，
+*跳转的不是这个程序，而是那个解释器*；原程序只是作为参数被交出去。
+
+那个解释器叫*动态链接器*（`ld.so`）。它每启动一个程序都要做四件事：
+
++   *找库* —— 程序说「我要用 libc」，它得去磁盘上把 libc 找出来
++   *把库映射进地址空间* —— 跟内核做的事一样，只不过这次是给库做的
++   *修正地址* —— 库被放在哪是随机的，代码里写死的那些地址得重算一遍（叫*重定位*）
++   *调用各家的初始化函数* —— 每个库都可能有「用之前得先准备好」的东西
+
+四件事都是*每次启动重来一遍*，而且跟程序要做什么无关。glibc 自带开关，能把账打出来：
+
+#lab("演示 08：动态链接器每次启动都要做的四件事")[
+  ```sh
+  $ LD_DEBUG=libs ./ctor-demo
+    find library=libctor.so [0]; searching
+    trying file=glibc-hwcaps/x86-64-v3/libctor.so
+    trying file=glibc-hwcaps/x86-64-v2/libctor.so
+    trying file=libctor.so
+    calling init: /lib64/ld-linux-x86-64.so.2
+    calling init: /usr/lib/libc.so.6
+    calling init: libctor.so
+    initialize program: ./ctor-demo
+
+  $ LD_DEBUG=statistics ./ctor-demo
+    total startup time in dynamic loader: 95205 cycles
+    time needed for relocation: 1577 cycles (3.4%)
+    time needed to load objects: 37497 cycles (38.4%)
+  ```
+
+  找库不是查一次表，是按层级逐级回退着试（那三行 `trying file=`）；
+  初始化按依赖顺序来，你自己的 `main` 排在最后。四件事里最贵的是映射各 `.so`，
+  但它只是 mmap 登记，不是把内容读进内存。
+
+  #note[
+    `LD_DEBUG=statistics` 的 cycle 数每次跑都不一样 —— 同一台机器上，
+    链接器的总时间在六万到十万之间跳，百分比也跟着跳。稳定的是另外两件：
+    找库试了几个地方，以及初始化的顺序。
+  ]
+
+  （完整脚本：`./docs/labs/resident-browser/08-dynamic-loader.sh`）
+]
+
+代价可以直接量：同一个 `hello.c` 编两遍，一个自足、一个要用解释器，
+两个程序都只打印一行字、做的事一模一样。
+
+#lab("演示 07：同一份源码，静态和动态差多少")[
+  ```sh
+  同一个 hello.c 编两份，文件里各自都是 4 段（R / R E / R / RW）：
+  hello-dyn     地址空间 25 行 = 段表 4 行 + 别人给的 21 行
+  hello-static  地址空间 12 行 = 段表 4 行 + 内核给的 8 行
+  …
+  这用在哪：两个都只打印一行字的程序各跑 400 次，静态 372 µs、动态 495 µs ——
+  多出来的 123 µs 全是链接器的活（找库、映射、重定位、调 init），跟程序要做什么毫无关系。
+  ```
+
+  静态版短掉的那 21 行，正是 `libc.so.6`、`ld-linux-x86-64.so.2` 这一堆 ——
+  这个文件的段表里一个字都没写。
+
+  #note[
+    这两个数每次跑都会动几十微秒，差值也跟着动（一百多微秒那个量级不变）。
+    机器上还开着桌面会话，这类绝对数只能当量级看。
+  ]
+
+  （完整脚本：`./docs/labs/resident-browser/07-elf-loading.sh`）
+]
+
 == 静态链接在每一组对比里都赢
 
 #cols[
@@ -119,8 +189,8 @@
   ```
 ]
 
-三比零。动态版本要为 `ld.so` 的启动、符号解析、映射库付开销 ——
-这一点在系统调用记录里看得最清楚：同样一份 `qb-open.c`，动态版 42 次调用，静态版 25 次。
+三比零 —— 动态版本多付的那一截，就是上面那四件事。
+这一点在系统调用记录里也看得清楚：同样一份 `qb-open.c`，动态版 42 次调用，静态版 25 次。
 多出来的 17 次里，有 8 次 `mmap`，其余是在库缓存里翻找的 `openat` / `newfstatat` / `fstat`。
 
 但静态不是免费的，它是*预付*的：

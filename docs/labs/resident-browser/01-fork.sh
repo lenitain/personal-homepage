@@ -6,7 +6,7 @@
 #
 # 形态说明：这个实验要回答的就是「一个变成几个」—— 所以跑完给一张进程表。
 #
-# 对应《我的 qutebrowser 启动好慢》第 1 节「一个进程是怎么启动的」。
+# 对应《我的 qutebrowser 启动好慢》第 1 节「第一步：复制」。
 set -euo pipefail
 
 cd "$(dirname "$(readlink -f "$0")")"

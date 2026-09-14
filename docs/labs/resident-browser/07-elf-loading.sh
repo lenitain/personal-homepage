@@ -21,7 +21,7 @@
 #       还没执行的那一刻把进程停住，再读 RIP —— 用 tools/execprobe.c（ptrace）。
 #       strace 看不到：内核在 execve 内部做的事不产生新的系统调用记录。
 #
-# 对应《我的 qutebrowser 启动好慢》第 1 节「一个进程里面有什么」。
+# 对应《快路径用什么写》第 2 节「跟着一起启动的，是动态链接器」。
 set -uo pipefail
 
 cd "$(dirname "$(readlink -f "$0")")"
