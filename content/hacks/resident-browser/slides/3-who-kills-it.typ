@@ -18,14 +18,14 @@
   一个 qutebrowser 不是一个进程，是五个：本体，加一小群 QtWebEngine 帮手。
 
   而这件事平时完全看不出来 —— 只有真的注销之后，
-  `ps` 里才会出现一堆没有爹的 renderer。
+  `ps` 里才会出现一堆没有父进程的渲染进程。
 ]
 
 #slide[
   = 释放资源是个分组问题，不是隔离问题
 
   #cols[
-    *namespace* 来自隔离世界：BSD jails、Solaris zones、后来的容器。
+    *namespace* 来自隔离世界：BSD jails、Solaris zones、docker 容器。
 
     它回答的是「怎么让一个进程看不见另一个进程」。
   ][
@@ -58,7 +58,7 @@
 #slide[
   = user namespace 的默认状态是「你没有身份」
 
-  空映射之下，`uid_map` 是空的，`getuid()` 拿到内核顶上的 overflow uid。
+  空的 user namespace 里，你不是你自己：`getuid()` 拿到的是内核顶上的占位值 65534。
 
   *要变成你自己，得显式地写一条映射。*
 
@@ -77,7 +77,7 @@
 ]
 
 #slide[
-  = 断的不是所有 IPC，是所有需要身份的 IPC
+  = 断的不是所有连接，是所有需要身份的连接
 
   #cols[
     *Wayland*
@@ -108,7 +108,8 @@
 #slide[
   = 补丁会一直打下去
 
-  `--kill-child` → 再套一层监督进程 → 再上 `PR_SET_PDEATHSIG`。
+  先给 wrapper 加 `--kill-child`（它死时顺手带走 init）→ 再套一层监督进程
+  （把收到的信号转发下去）→ 再上 `PR_SET_PDEATHSIG`（父进程死了，子进程跟着死）。
 
   打到第三个补丁，「简单的 namespace 方案」已经是三个进程深了 ——
   为生命周期写的代码，比原来的问题本身还多。
@@ -126,12 +127,13 @@
 ]
 
 #slide[
-  = 看起来最像的那个不行：scope 没有主进程
+  = 看起来最像的那个不行：它没有主进程
 
-  niri 给每个 `spawn-sh` 都建了独立的 cgroup，还带着 `KillMode=control-group`。
+  niri 给每个 `spawn-sh` 都建了独立的 cgroup，退出时还会把整组扫干净。
   这简直就是为了这个需求长的。
 
-  *但 scope 的 `MainPID` 是空的* —— 没有主进程，就没有谁的死亡可以被注意到。
+  但那是 systemd 的 *scope*：只把一组进程圈起来记账，*不会指定谁是主进程*。
+  既然没有主进程，就没有谁的死亡可以被注意到。
 
   #note[现场跑：`./docs/labs/resident-browser/11-cgroup-vs-mainpid.sh`]
 ]
@@ -139,8 +141,8 @@
 #slide[
   = 三种启动方式，差别只有一件事
 
-  同一棵进程树、同一个 `SIGKILL`：裸 setsid 有孤儿，scope 有孤儿，
-  service 干干净净。
+  同一棵进程树、同一个 `SIGKILL`：直接跑有孤儿，scope 有孤儿，
+  service（会指定主进程的那种）干干净净。
 
   差别只有一件事：这个 cgroup 有没有把某个进程指定为主进程。
 
@@ -150,8 +152,8 @@
 #slide[
   #punch[
     需要生命周期保证的时候，
-    去找那个本来就管着生命周期的东西。
+    去找那个本来就管着生命周期的工具。
 
-    隔离原语当不好 supervisor。
+    隔离原语不应用于管理资源的生命周期。
   ]
 ]

@@ -102,8 +102,8 @@ Ghostty 对终端做的是同一件事：一个常驻进程，加上很快的客
   （完整脚本：`./docs/labs/resident-browser/12-resident-memory.sh`）
 ]
 
-底价比我以为的*小七倍*。而且换成真实 profile 几乎没动 ——
-所以你付的也不是 profile 的开销。
+我印象里是「零窗口 700 MB 到 1 GB」。量出来是一百多兆 ——
+而且换成真实 profile 几乎没动，所以你付的也不是 profile 的开销。
 
 把它推上 GB 的是*使用*：页面 renderer 和它们的 JavaScript 堆会随着浏览不断累积。
 那不是常驻的锅 —— 一个不常驻的浏览器开着同样这些标签页，一样要付。
