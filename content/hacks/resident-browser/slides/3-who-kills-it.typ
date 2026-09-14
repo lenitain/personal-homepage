@@ -91,7 +91,7 @@
     而身份恰好被 user namespace 改掉了。
   ]
 
-  #note[现场跑：`./docs/labs/resident-browser/10-namespace-failure-modes.sh`]
+  #note[现场跑：`./docs/labs/resident-browser/14-identity-channels.sh`]
 ]
 
 #slide[

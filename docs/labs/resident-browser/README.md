@@ -16,6 +16,9 @@
 - **`06-one-copy.sh` 要造一个 2 GiB 的共享库**（「100 个进程共用一份」那个反证用的素材）。
   它会往工作目录里写 2 GiB 真实字节，跑一次约 20 秒。空间不够会自动减半，
   也可以自己指定：`./06-one-copy.sh 512`。
+- **`14-identity-channels.sh` 要在一台有会话的机器上跑**（session bus 和 Wayland 都得在）。
+  它自己 `unshare --user` 建一个空映射的 namespace，跟 broker 说一句 SASL 握手、
+  向合成器要一份 registry —— 两条都是只读，不碰你正在用的实例。
 
 ## 脚本
 
@@ -24,22 +27,23 @@
 | `01-fork.sh` | 我的 qutebrowser 启动好慢 | fork 复制一份自己：两个进程，唯一的区别是 pid |
 | `02-execve.sh` | 我的 qutebrowser 启动好慢 | execve 换内容不换进程：pid 不变 |
 | `03-redirect.sh` | 我的 qutebrowser 启动好慢 | fork 和 exec 之间那一步：shell 重定向就是这么实现的 |
-| `04-address-space.sh` | 我的 qutebrowser 启动好慢 | 全系统地址空间加起来 6 TiB，物理内存 15 GiB |
+| `04-address-space.sh` | 我的 qutebrowser 启动好慢 | 所有进程地址空间加起来（7 TiB）是物理内存（15 GiB）的几百倍 |
 | `05-mmap-not-occupied.sh` | 我的 qutebrowser 启动好慢 | 映射 1 GiB 物理内存不涨；碰多少涨多少 |
 | `06-one-copy.sh` | 我的 qutebrowser 启动好慢 | 100 个进程各读一遍 2 GiB 的库，物理内存里只有一份 |
 | `07-elf-loading.sh` | 快路径用什么写 | 段表与地址空间一一对应；execve 之后内核和链接器发的系统调用；静态 vs 动态的启动开销 |
 | `08-dynamic-loader.sh` | 快路径用什么写 | 找库 / 重映射 / 重定位 / 调 init；惰性绑定 vs `-z now` |
-| `09-zygote-prefork.sh` | 我的 qutebrowser 启动好慢 | fork 继承 vs exec 重来；真实 QtWebEngine zygote |
+| `09-zygote-prefork.sh` | 什么样的程序值得常驻 | fork 继承 vs exec 重来；真实 QtWebEngine zygote |
 | `10-namespace-failure-modes.sh` | 谁来释放资源 | 非特权建 PID namespace、空 uid_map、杀 wrapper |
 | `11-cgroup-vs-mainpid.sh` | 谁来释放资源 | scope 与 service 的 MainPID 差异；三种启动方式的资源释放对比 |
 | `12-resident-memory.sh` | 什么样的程序值得常驻 / 什么该留在 RAM | 孤立实例量常驻成本（空 profile / 真实 profile / 在用的那个） |
 | `13-qutebrowser-checkup.sh` | 我的 qutebrowser 启动好慢 / 什么样的程序值得常驻 | 970 字节的 Python 脚本；模块导入账单；把启动切成几段 |
+| `14-identity-channels.sh` | 谁来释放资源 | 空的 user namespace 里：D-Bus 的 `AUTH EXTERNAL` 被 REJECTED，Wayland 照通 |
 | `overflow-check.sh` | 快路径用什么写 | C 版缓冲区溢出的边界，安全网内 |
 | `launchers/` | 快路径用什么写 | 同一个启动器的九种实现、五种语言 |
 
-## 前九个脚本互相独立
+## 这些脚本互相独立
 
-`01`–`09` 各自 `mktemp -d` 自己造素材、跑完自己删，不依赖仓库里任何东西，
+`01`–`11`、`14` 各自 `mktemp -d` 自己造素材、跑完自己删，不依赖仓库里任何东西，
 也不需要 root。直接跑就行：
 
 ```sh
@@ -54,6 +58,7 @@
 ./09-zygote-prefork.sh            # 这个会顺便读你机器上真实的 QtWebEngine 进程
 ./10-namespace-failure-modes.sh   # 需要非特权 user namespace 可用
 ./11-cgroup-vs-mainpid.sh         # 需要 systemd --user
+./14-identity-channels.sh         # 需要有会话（session bus + Wayland）
 ```
 
 `fake-sock.py` + `mkfake.sh` 提供一个假的 qutebrowser IPC socket。

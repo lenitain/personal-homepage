@@ -94,18 +94,43 @@ Linux 这块地上住着两套互不相干的东西，而它们经常被当成�
 不是候选词不出来，也不是候选框位置错了 —— 是输入法像根本不存在。
 「转换不出来」和「根本没接上」是两类完全不同的故障。
 
-原因在认证层。输入法住在 session bus 上，而 D-Bus 的握手第一件事就是自报身份：
+原因在认证层。输入法住在 session bus 上，而 D-Bus 的握手第一件事就是自报身份。
 
-+   libdbus 用 `getuid()` 拼出 `AUTH EXTERNAL` 凭据 —— 在空映射里，那是 65534
-+   dbus-broker *不在你的 namespace 里*，它用 `SO_PEERCRED` 拿内核报的 uid —— 那是 1000
-+   两个数对不上，broker 回 `REJECTED`，你没有 session bus
+我没有继续猜，而是把握手协议自己说了一遍 —— 不借助任何库，直接连 socket、发字节。
+因为 libdbus 会替你把凭据算好，而要看的就是*它算出来的那个 uid，
+跟内核报给 broker 的 uid 是不是同一个*。
 
-fcitx5 就在那条 bus 上，于是 Qt 的输入法模块够不着它，整块功能消失。
+#lab("演示 14：同一个 namespace 里，D-Bus 断了、Wayland 没断")[
+  ```sh
+  $ ./14-identity-channels.sh
+    uid：宿主上 1000；空的 namespace 里 65534（uid_map 是空的，内核拿 overflow uid 顶上）
+
+    D-Bus —— 先认证，第一句话就是自报身份
+      宿主上          声称 1000，AUTH EXTERNAL 31303030    → OK 82905cdad8870b558b87afde0d204fcb
+      空的 namespace  声称 65534，AUTH EXTERNAL 3635353334 → REJECTED EXTERNAL
+
+    Wayland —— 裸 connect，连上就说，没有一步问你是谁
+      宿主上          connect 成功，要回 registry，2032 字节
+      空的 namespace  connect 成功，要回 registry，2032 字节
+  ```
+
+  同一个动作，两条通道两个结果。`OK` 后面那串是 broker 自己的 GUID
+  （它每次重启都会变），要看的是 `OK` 和 `REJECTED` 这两个词。
+
+  链条到这里闭合了：
+
+  +   libdbus 用 `getuid()` 拼出 `AUTH EXTERNAL` 凭据 —— 在空映射里，那是 65534
+  +   dbus-broker *不在你的 namespace 里*，它用 `SO_PEERCRED` 拿内核报的 uid —— 那是 1000
+  +   两个数对不上，broker 回 `REJECTED`，你没有 session bus
+
+  fcitx5 就在那条 bus 上，于是 Qt 的输入法模块够不着它，整块功能消失。
+
+  （完整脚本：`./docs/labs/resident-browser/14-identity-channels.sh`）
+]
 
 == 断的不是所有 IPC，是所有需要身份的 IPC
 
-同一个 namespace 里，往 Wayland 合成器上发的请求是通的：
-`connect()` 成功，要一份 registry 回来，合成器照回。
+两条通道的差别不在连接层 —— 两条都连上了。差别在*认证*：
 
 #cols[
   *Wayland*

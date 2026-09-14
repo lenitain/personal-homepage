@@ -144,11 +144,13 @@ qtweb_of_type() {
 }
 so_list() { awk '{print $6}' "/proc/$1/maps" 2>/dev/null | grep '\.so' | sort -u; }
 
-rd_extra=""
 zy=$(qtweb_of_type zygote  | awk 'NR==1')
 rd=$(qtweb_of_type renderer | awk 'NR==1')
+zy_count=""
+rd_extra=""
 if [ -n "${zy:-}" ] && [ -n "${rd:-}" ]; then
-    rd_extra=$(diff <(so_list "$zy") <(so_list "$rd") | wc -l) || true
+    zy_count=$(so_list "$zy" | wc -l)
+    rd_extra=$(comm -13 <(so_list "$zy") <(so_list "$rd") | wc -l)
 fi
 
 # ------------------------------------------------ 一张表（挑出来的原始输出）
@@ -168,7 +170,14 @@ cat <<EOF
   跟这次任务要干什么毫无关系。fork 不 exec，子进程拿到的是
   父进程那份已经建好的地址空间（写时复制，不真的拷内存），那四步一次都不用再做。
 EOF
-[ -n "$rd_extra" ] && printf '\n  真实系统上 Chromium / QtWebEngine 就是这么干的：renderer 从 zygote fork，自己额外加载的 .so %s 个。\n' "$rd_extra"
+if [ -n "$rd_extra" ]; then
+    if [ "$rd_extra" -eq 0 ]; then
+        rd_note="比它多 0 个 —— 一个库都没有重新加载"
+    else
+        rd_note="比它多 $rd_extra 个"
+    fi
+    printf '\n  真实系统上 Chromium / QtWebEngine 就是这么干的：zygote 手里 %s 个 .so，\n  renderer 从它 fork 出来，%s。\n' "$zy_count" "$rd_note"
+fi
 cat <<'EOF'
 
   这用在哪：这就是「只付一次」本身的做法 —— 但保温的父进程必须*比启动它的东西活得久*，
