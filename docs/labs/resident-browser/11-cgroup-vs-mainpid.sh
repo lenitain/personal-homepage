@@ -1,8 +1,8 @@
 #!/bin/bash
 # 实验：为什么「有 cgroup」还不够，必须有 MainPID 跟踪
 #
-# 承接 10 —— namespace 当收尸工具的三个代表面全否了：建不起来、改掉你的身份、
-# 连 wrapper 死了都带不走里面的进程。收尸这件事得换人做，换成 pid 1。
+# 承接 10 —— namespace 当释放资源工具的三个代表面全否了：建不起来、改掉你的身份、
+# 连 wrapper 死了都带不走里面的进程。释放资源这件事得换人做，换成 pid 1。
 #
 # 这个实验要问的是：pid 1 的两种用法（scope / service）差在哪一件事上。
 # 三种启动方式跑同一个形状的进程树（一个「主进程」+ 一个它拉起来的子进程），
@@ -115,7 +115,7 @@ short_cg() { printf '%s' "${1##*/app.slice/}"; }
 
 cat <<EOF
 
-  这个实验要回答：拿 pid 1 收尸，光有 cgroup 够不够？
+  这个实验要回答：拿 pid 1 释放资源，光有 cgroup 够不够？
 
   同一个命令，两种 systemd 用法，各建出一个 cgroup：
     --scope   $(short_cg "$scope_cg")   MainPID ${scope_mp:-（空）}
@@ -126,7 +126,7 @@ cat <<EOF
     B  systemd 临时 scope   有 cgroup，MainPID 空    子进程 $B_RES
     C  systemd 临时 service 有 cgroup，MainPID 有    子进程 $C_RES
 
-  最容易看走眼的是 B：systemd-cgls 看过去和 C 一模一样，可它不负责收尸。
+  最容易看走眼的是 B：systemd-cgls 看过去和 C 一模一样，可它不负责释放资源。
   「有个容器把它装着」和「有人知道谁是主进程」是两件事，保证来自后者。
 
   这用在哪：常驻 qutebrowser 的前提到此定下来 —— 1.2 秒只付一次，靠的就是它一直活着，

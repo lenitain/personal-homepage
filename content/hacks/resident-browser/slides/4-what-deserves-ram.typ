@@ -1,4 +1,4 @@
-#import "../.course.typ": title, slide, punch, note
+#import "../.course.typ": note, punch, slide, title
 
 #set document(title: "什么该留在 RAM（讲义）")
 
@@ -9,9 +9,7 @@
 #slide[
   #title[什么该留在 RAM]
 
-  收尸的人定了。这一章是钱的问题。
-
-  #note[完整版见左边文件树里的 `4-what-deserves-ram.typ`。]
+  释放资源的人定了。这一章是开销的问题。
 ]
 
 #slide[
@@ -34,11 +32,11 @@
     [页面状态（DOM / JS）], [关页即释放], [属于那个页面],
   )
 
-  中间那一行是钱所在的地方 —— 那两份缓存*看起来*都像是你会想放进 RAM 的东西。
+  中间那一行是开销所在 —— 那两份缓存*看起来*都像是你会想放进 RAM 的东西。
 ]
 
 #slide[
-  = profile 只有几百 KB，钱不在这里
+  = profile 只有几百 KB，开销不在这里
 
   一个天天在用的 profile，就算整份拷进内存，代价也就是这个量级。
 

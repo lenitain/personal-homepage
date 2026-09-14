@@ -1,5 +1,5 @@
 #!/bin/bash
-# 侦察运行：起一次 qutebrowser，全程 strace，然后按进程组收尸。
+# 侦察运行：起一次 qutebrowser，全程 strace，然后按进程组释放资源。
 # 写成文件是因为内联命令里出现过的模式串会匹配到我自己的 shell。
 set -u
 cd /tmp/qbphase || exit 1

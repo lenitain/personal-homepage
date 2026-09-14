@@ -30,8 +30,8 @@
 | `07-elf-loading.sh` | 我的 qutebrowser 启动好慢 | 段表与地址空间一一对应；execve 之后内核和链接器发的系统调用；静态 vs 动态的启动开销 |
 | `08-dynamic-loader.sh` | 我的 qutebrowser 启动好慢 | 找库 / 重映射 / 重定位 / 调 init；惰性绑定 vs `-z now` |
 | `09-zygote-prefork.sh` | 我的 qutebrowser 启动好慢 | fork 继承 vs exec 重来；真实 QtWebEngine zygote |
-| `10-namespace-failure-modes.sh` | 谁来收尸 | 非特权建 PID namespace、空 uid_map、杀 wrapper |
-| `11-cgroup-vs-mainpid.sh` | 谁来收尸 | scope 与 service 的 MainPID 差异；三种启动方式的收尸对比 |
+| `10-namespace-failure-modes.sh` | 谁来释放资源 | 非特权建 PID namespace、空 uid_map、杀 wrapper |
+| `11-cgroup-vs-mainpid.sh` | 谁来释放资源 | scope 与 service 的 MainPID 差异；三种启动方式的资源释放对比 |
 | `12-resident-memory.sh` | 什么样的程序值得常驻 / 什么该留在 RAM | 孤立实例量常驻成本（空 profile / 真实 profile / 在用的那个） |
 | `13-qutebrowser-checkup.sh` | 我的 qutebrowser 启动好慢 / 什么样的程序值得常驻 | 970 字节的 Python 脚本；模块导入账单；把启动切成几段 |
 | `overflow-check.sh` | 快路径用什么写 | C 版缓冲区溢出的边界，安全网内 |

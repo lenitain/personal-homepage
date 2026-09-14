@@ -448,7 +448,7 @@ $ readelf -lW hello-dyn | grep -A1 INTERP
   （完整脚本：`./docs/labs/resident-browser/08-dynamic-loader.sh`）
 ]
 
-== 这套流程要花多少钱
+== 这套流程的代价是多少
 
 上面那一整套流程要花多少时间？先看一个最小的例子：同一个 `hello.c` 编两遍，
 一个是静态链接（自足，前面「execve 拿到一个文件」那节的路），
@@ -529,7 +529,7 @@ execve("/usr/lib/qt6/QtWebEngineProcess", ["--type=zygote", …])
 ```
 
 连 `qutebrowser --version` 这种「什么都不干」的调用，QtWebEngine 都会先起两个
-zygote 模板进程。第 1 节讲的「fork 继承地址空间」在这里第一次露出它为什么值钱。
+zygote 模板进程。第 1 节讲的「fork 继承地址空间」在这里第一次露出它为什么重要。
 
 #note[
   ⚠️ 这个体检里有个*方法论陷阱*，第一次量的时候我就被骗了。

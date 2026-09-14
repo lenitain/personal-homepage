@@ -37,7 +37,7 @@ uid2=$(unshare --user --map-current-user --pid --fork --mount-proc sh -c 'id -u'
 umap2=$(unshare --user --map-current-user --pid --fork --mount-proc cat /proc/self/uid_map 2>/dev/null |
         tr -s ' ' | sed 's/^ //; s/ $//')
 
-# ------------------------------------------------- 失败面三：收尸收不干净
+# ------------------------------------------------- 失败面三：资源释放不干净
 
 unshare --user --map-current-user --pid --fork sleep 300 &
 wrapper=$!
@@ -66,7 +66,7 @@ wait "$wrapper" 2>/dev/null
 
 cat <<EOF
 
-  这个实验要回答：PID namespace 能不能当「父进程一死、孩子跟着走」的收尸工具？
+  这个实验要回答：PID namespace 能不能当「父进程一死、孩子跟着走」的释放资源工具？
 
   三条实跑（都不需要 root）：
   unshare --pid --fork --mount-proc true   → ${out:-（没有任何输出）}（退出码 $rc）
@@ -78,7 +78,7 @@ cat <<EOF
   kill -KILL wrapper   → wrapper 状态 $kill_w，sleep 状态 $kill_s$(alive_note "$kill_s")
 
   三个失败面：一、非特权用户单建 PID namespace 建不起来；二、先建 user namespace，uid 变成 65534，
-  按 uid 认人的机制全部拒绝你；三、建起来了也收不了尸 —— namespace 不是一棵能整棵砍掉的树，
+  按 uid 认人的机制全部拒绝你；三、建起来了也释放不了资源 —— namespace 不是一棵能整棵砍掉的树，
   里面的 pid 1 死了，内核不会顺手把同 namespace 的其他人也带走。
 
   这用在哪：错的工具当场就报错，你会立刻换一个；它要是「看起来成功、代价在别处」，

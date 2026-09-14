@@ -1,21 +1,19 @@
-#import "../.course.typ": title, slide, punch, note, cols
+#import "../.course.typ": cols, note, punch, slide, title
 
-#set document(title: "谁来收尸（讲义）")
+#set document(title: "谁来释放资源（讲义）")
 
 // 切法跟文档版不同：一张幻灯片只承载一个「讲到这里要让人记住的点」。
 // 跑出来的结果不进讲义 —— 讲课的时候当场跑，讲义上只留脚本路径。
 
 #slide[
-  #title[谁来收尸]
+  #title[谁来释放资源]
 
   常驻的含义就是*比启动它的东西活得更久* ——
   这正是它的价值所在，也正是问题所在。
-
-  #note[完整版见左边文件树里的 `3-who-kills-it.typ`。]
 ]
 
 #slide[
-  = 欠的不是关掉一个进程，是收一整棵树的尸
+  = 不是关掉一个进程，是释放一整棵树的资源
 
   一个 qutebrowser 不是一个进程，是五个：本体，加一小群 QtWebEngine 帮手。
 
@@ -24,7 +22,7 @@
 ]
 
 #slide[
-  = 收尸是个分组问题，不是隔离问题
+  = 释放资源是个分组问题，不是隔离问题
 
   #cols[
     *namespace* 来自隔离世界：BSD jails、Solaris zones、后来的容器。
@@ -43,7 +41,7 @@
   = PID namespace 看起来正好解决这两个问题
 
   namespace 的 init 一死，内核回收里面所有进程 ——
-  隔离和收尸，一个原语就够了。
+  隔离和释放资源，一个原语就够了。
 ]
 
 #slide[
@@ -97,7 +95,7 @@
 ]
 
 #slide[
-  = 它连收尸这件事本身也没做成
+  = 它连释放资源这件事本身也没做成
 
   杀掉 wrapper，namespace 里的进程还活着。
 
@@ -119,7 +117,7 @@
 ]
 
 #slide[
-  = 收尸需要的东西只有两样
+  = 释放资源需要的东西只有两样
 
   + 一个 *cgroup* —— 由内核维护的、「到时候要扫掉哪些进程」的那个集合
   + *主进程跟踪* —— 有东西注意到主进程退出了，不管它是怎么退的

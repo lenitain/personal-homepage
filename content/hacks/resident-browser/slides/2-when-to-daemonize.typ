@@ -11,9 +11,7 @@
 
   上一章把那 1.2 秒切成了两段，两段都跟你要打开的页面无关。
 
-  *这一章问的是：那两段能不能只付一次？*
-
-  #note[完整版见左边文件树里的 `2-when-to-daemonize.typ`。]
+  *那么，这两段能不能只付一次？*
 ]
 
 #slide[
@@ -73,7 +71,7 @@
 
   常见说法是「零窗口 700 MB 到 1 GB」。*错了七倍。*
 
-  而换成真实 profile 几乎没动 —— 你付的也不是 profile 的钱。
+  而换成真实 profile 几乎没动 —— 你付的也不是 profile 的开销。
 
   #note[现场跑：`./docs/labs/resident-browser/12-resident-memory.sh`]
 ]
