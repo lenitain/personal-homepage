@@ -138,23 +138,60 @@ describe('章节文件', () => {
  * 各章负责「量出来是什么」。
  */
 describe('数字', () => {
-	test('入口页用的是量出来的 129 MiB，不是印象里的 140', async () => {
+	/**
+	 * 这几条钉的不是「某个数等于多少」，而是**正文与它引用的实验是同一批数**。
+	 *
+	 * 起因：正文曾经把「常驻 129 MiB」写成一个固定事实，而实验的重跑给出 136 MiB；
+	 * 「六个进程的 Pss 是 0.2 MiB」和实验输出也有过 35 / 36 KiB 的差别。
+	 * 这类数都跟着机器状态动，所以规矩是：
+	 *
+	 *   - **会动的数**：正文只给量级或范围，精确值只在实验输出里（那里每次都是现读的）
+	 *   - **不变的数**（口径、比例、件数）：正文和实验必须逐字一致
+	 *
+	 * 于是测试只钉「不变的数」，以及「会动的数没有被写死成某一个值」。
+	 */
+	test('正文没把会随机器变的数字写死', async () => {
+		const ch1 = await readFile(join(COURSE_DIR, '1-my-browser-is-slow.typ'), 'utf-8');
 		const index = await readFile(join(COURSE_DIR, 'index.typ'), 'utf-8');
 
-		expect(index).toContain('129 MiB');
 		expect(index, '“140 MiB” 是旧稿遗留的数字').not.toContain('140 MiB');
-	});
-
-	test('常驻成本在入口与两章正文里是同一个数', async () => {
-		const sources = await Promise.all(
-			['index.typ', '2-when-to-daemonize.typ', '4-what-deserves-ram.typ'].map((name) =>
-				readFile(join(COURSE_DIR, name), 'utf-8')
-			)
+		expect(index, '常驻成本应当写成量级，而不是某一个读数').not.toMatch(
+			/\[常驻成本\], \[0\], \[1\d\d MiB\]/
 		);
 
-		for (const source of sources) {
-			expect(source).toContain('129 MiB');
-		}
+		// 贴进正文的实验输出是某一次运行的样子，所以旁边必须说清「它会动」，
+		// 否则读者会把它当成一个常量 —— 这正是当初 129 / 136 那次漂移的来源。
+		expect(ch1, '六个进程那份实验输出旁边要交底「数会动」').toContain('在 35 到 40 KiB 之间跳');
+
+		const ch3 = await readFile(join(COURSE_DIR, '4-what-deserves-ram.typ'), 'utf-8');
+		expect(ch3, '贴实验输出的那一处要交底它会跟着机器状态动').toMatch(
+			/跟着机器状态动|量级和那个差值/
+		);
+	});
+
+	test('演示 12 的输出只贴一处，且两个读数差得不离谱', async () => {
+		// 第 2 章把这份输出压成了一句话（只给量级），精确读数留在第 3 章 ——
+		// 同一批数贴两遍，正是当初 129 / 136 漂移的来源。
+		const ch2 = await readFile(join(COURSE_DIR, '2-when-to-daemonize.typ'), 'utf-8');
+		const ch3 = await readFile(join(COURSE_DIR, '4-what-deserves-ram.typ'), 'utf-8');
+
+		expect(ch2, '第 2 章只给量级，不再贴实验输出').not.toMatch(/空 profile\s+\d+ MiB/);
+		expect(ch2, '第 2 章要指向量它的那个脚本').toContain('12-resident-memory.sh');
+
+		const blank = ch3.match(/空 profile\s+(\d+) MiB/)?.[1];
+		const real = ch3.match(/真实 profile\s+(\d+) MiB/)?.[1];
+		expect(blank, '演示 12 的输出里应当有「空 profile」那一行').toBeTruthy();
+		expect(real, '演示 12 的输出里应当有「真实 profile」那一行').toBeTruthy();
+		expect(Number(real), '真实 profile 只该比空 profile 多几兆').toBeGreaterThan(Number(blank));
+		expect(Number(real) - Number(blank)).toBeLessThanOrEqual(5);
+	});
+
+	test('常驻底价在正文里是同一个量级说法', async () => {
+		const index = await readFile(join(COURSE_DIR, 'index.typ'), 'utf-8');
+
+		expect(index).toContain('一百多 MiB');
+		expect(index, '口径要写清楚，否则读者会把两种量法的数混起来').toContain('latency.sh');
+		expect(index).toContain('measure.sh');
 	});
 
 	test('启动器延迟与它出现的地方一致（377.6 µs 最小值口径）', async () => {
@@ -168,11 +205,16 @@ describe('数字', () => {
 		expect(index).toContain('377.6');
 	});
 
-	test('入口页说明了启动器延迟的测量口径（免得跟 measure.sh 的 p50 混起来）', async () => {
-		const index = await readFile(join(COURSE_DIR, 'index.typ'), 'utf-8');
+	test('启动时间在正文、讲义、入口里是同一个区间', async () => {
+		const sources = await Promise.all(
+			['1-my-browser-is-slow.typ', 'slides/1-my-browser-is-slow.typ', 'index.typ'].map((name) =>
+				readFile(join(COURSE_DIR, name), 'utf-8')
+			)
+		);
 
-		expect(index).toContain('latency.sh');
-		expect(index).toContain('measure.sh');
+		for (const source of sources) {
+			expect(source, '启动时间的区间要一致').toContain('1.2 到 1.9 秒');
+		}
 	});
 });
 

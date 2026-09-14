@@ -2,6 +2,9 @@
 
 > 这份文档仅作内部使用：是给我自己（以及后续的 coding agent）看的写作规范。
 > **它不属于 `content/`** —— `content/` 是真正对外展示的网页内容，本文件只指导"怎么写这些内容"，绝不直接进页面。
+>
+> 本文管**单篇怎么写**。系列课件（`content/hacks/resident-browser/`）还有一层结构规矩：
+> 一段内容该不该存在、该给数据还是该给实验，见 `docs/courseware-design.md`。
 
 ## 目的
 

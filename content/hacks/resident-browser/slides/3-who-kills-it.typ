@@ -15,7 +15,9 @@
 #slide[
   = 不是关掉一个进程，是释放一整棵树的资源
 
-  一个 qutebrowser 不是一个进程，是五个：本体，加一小群 QtWebEngine 帮手。
+  一个 qutebrowser 不是一个进程，是一棵树：本体，加一小群 QtWebEngine 帮手
+  （几个 zygote，一个 renderer）。数一下自己机器上的：
+  `pgrep -af 'qutebrowser|QtWebEngineProcess' | wc -l`。
 
   而这件事平时完全看不出来 —— 只有真的注销之后，
   `ps` 里才会出现一堆没有父进程的渲染进程。

@@ -89,7 +89,7 @@ self_top=$(sort -k2 -rn imp.tsv | head -1)
 self_name=$(printf '%s' "$self_top" | cut -f3)
 self_ms=$(printf '%s' "$self_top" | cut -f2 | awk '{printf "%.1f", $1/1000}')
 
-# ============================================ 体检 4：把 1.2 秒切成两段
+# ====================================== 体检 4：把这一秒多切成两段
 
 # 全程带时间戳。f 跟子进程，tt 打时刻；界标全从 trace 里挑，脚本自己不插桩。
 # 用 setsid 起一整组，跑完连 strace 带 qutebrowser 一起杀，不留残留进程。
@@ -132,7 +132,7 @@ marks=$(printf '    %s  %8s  %s\n' "$ts_start" "0 ms" "execve(\"$QB\") —— �
 
 cat <<EOF
 
-  这个实验要回答：从敲下 qutebrowser 到窗口出现的那 1.2 秒，花在哪几段？
+  这个实验要回答：从敲下 qutebrowser 到窗口出现的那一秒多，花在哪几段？
 
   它是什么     $qb_kind，$size 字节，头一行 $first_line
   execve 链    真正 exec 成功 $execd 次：$exec_list
@@ -142,9 +142,12 @@ cat <<EOF
   给启动全程打时间戳（strace -f -tt $QB -R about:blank），三个外部可观测的界标：
 $marks
 
-  于是这 1.2 秒分成两段：*前 $py_ms 毫秒是 Python*（跟体检 3 的 $top_ms ms 账单对得上），
-  *后 $qt_ms 毫秒是 Qt 和 QtWebEngine*，大头在这一段。
+  于是这一次的 $(( py_ms + qt_ms )) 毫秒分成两段：*前 $py_ms 毫秒是 Python*
+  （跟体检 3 的 $top_ms ms 账单对得上），*后 $qt_ms 毫秒是 Qt 和 QtWebEngine*，大头在这一段。
 
-  这用在哪：先把 1.2 秒切成两半，才谈得上问「哪一半是每次完全一样的」——
+  两个数都跟着机器负载动（同一台机器上，Python 那一段在 230 到 340 毫秒之间跳，
+  总时间在 1.2 到 1.9 秒之间跳），所以要看的是*比例*，不是某一次的值。
+
+  这用在哪：先把这一秒多切成两半，才谈得上问「哪一半是每次完全一样的」——
   而「能不能只付一次」问的就是它。
 EOF

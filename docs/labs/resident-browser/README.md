@@ -3,6 +3,13 @@
 `content/hacks/resident-browser/` 那份课件里贴的实验，脚本都在这里 ——
 正文是序加四章。每一节里贴的输出都是这些脚本跑出来的，不是手抄的。
 
+脚本为**决定**服务，不为「演示某个数字」服务：哪个决定点需要什么量、
+哪些事实缺实验、哪些脚本已经多余，见 `docs/courseware-design.md`。
+
+正文只引用那些「不量就会做出不同决定」的实验。所以表里少数脚本在正文中
+已经不再单独成节（例如 `04-address-space.sh` 并进了序里的一段），
+它们仍然可以跑 —— 留着是因为想复现随时能复现，不是因为正文还在引它。
+
 ## 跑之前
 
 - **测量脚本要绑核。** 在一台开着桌面会话的机器上不绑核，同一份代码的读数能差一半。
@@ -39,13 +46,17 @@
 | `12-resident-memory.sh` | 第 1 章 / 第 3 章 | 孤立实例量常驻成本（空 profile / 真实 profile / 在用的那个） |
 | `13-qutebrowser-checkup.sh` | 序 / 第 1 章 | 970 字节的 Python 脚本；模块导入账单；把启动切成几段 |
 | `14-identity-channels.sh` | 第 2 章 | 空的 user namespace 里：D-Bus 的 `AUTH EXTERNAL` 被 REJECTED，Wayland 照通 |
+| `15-orphan-reaping.sh` | 第 2 章 | 父进程退出后子进程归谁（最近的 subreaper / pid 1）；接管 ≠ 收拾 |
+| `16-page-cache.sh` | 第 3 章 | 读过的文件占的内存可以还回去；还回去之后文件照样在用 |
+| `17-tmpfs-not-reclaimable.sh` | 第 3 章 | 同一个 64 MiB 的 cgroup 里：文件页回收得掉，tmpfs 页回收不掉 |
 | `overflow-check.sh` | 第 4 章 | C 版缓冲区溢出的边界，安全网内 |
 | `launchers/` | 第 4 章 | 同一个启动器的九种实现、五种语言 |
 
 ## 这些脚本互相独立
 
-`01`–`11`、`14` 各自 `mktemp -d` 自己造素材、跑完自己删，不依赖仓库里任何东西，
-也不需要 root。直接跑就行：
+`01`–`11`、`14`–`17` 各自自己造素材、跑完自己删（工作目录优先放 `/var/tmp`，
+因为 `/tmp` 常常是 tmpfs，那两个缓存实验在 tmpfs 上做不出结论），
+不依赖仓库里任何东西，也不需要 root。直接跑就行：
 
 ```sh
 ./01-fork.sh
@@ -61,6 +72,9 @@
 ./10-namespace-failure-modes.sh   # 需要非特权 user namespace 可用
 ./11-cgroup-vs-mainpid.sh         # 需要 systemd --user
 ./14-identity-channels.sh         # 需要有会话（session bus + Wayland）
+./15-orphan-reaping.sh            # 不需要特权
+./16-page-cache.sh                # 需要非 tmpfs 的目录放素材（优先 /var/tmp）
+./17-tmpfs-not-reclaimable.sh     # 需要 systemd --user 的 memory 控制器 + 一个 tmpfs
 ```
 
 `fake-sock.py` + `mkfake.sh` 提供一个假的 qutebrowser IPC socket。
