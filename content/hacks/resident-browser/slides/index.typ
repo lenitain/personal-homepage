@@ -1,4 +1,4 @@
-#import "../.course.typ": title, slide, punch, note
+#import "../../../.course.typ": title, slide, punch, note
 #import "../.syllabus.typ": preface, chapters
 
 #set document(title: "一个已经开着的浏览器（讲义）")
@@ -54,7 +54,7 @@
   = 三起事故，一个教训
 
   - 我凭印象把常驻开销记成「700 MB 到 1 GB」，量出来是 129 MiB
-  - 我以为多语言实现的价值在对比表，实际价值在它抓出的*内存越界写*
+  - 我以为一段「一直能用」的代码就是对的，它其实一直在缓冲区外面写
   - 一个实验「跑通了」但完全无效（`$$` 被 systemd 展开成了字面 `$`）
 
   #punch[三次都是拿脑子里的模型代替了观测。]

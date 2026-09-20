@@ -1,4 +1,4 @@
-#import ".course.typ": title, ask, lab, oops, note, punch
+#import "../../.course.typ": title, ask, lab, oops, note, punch
 #import ".syllabus.typ": chapterRef
 
 #set document(title: "我的 qutebrowser 启动好慢，我该怎么办？")
@@ -294,8 +294,9 @@ $ cat /proc/self/maps
 004c8000-004ce000 rw-p 00000000  [heap]
 ```
 
-每一行是一个区间：起止地址、权限、以及它对应哪个文件 —— 最后一列就是上面说的那句
-「约定」。那一列是空的，说明这段内容不在任何文件里（栈、堆就是这样）。
+每一行是一个区间 —— 内核管它叫*虚拟内存区域*（VMA，virtual memory area）：
+起止地址、权限、以及它对应哪个文件。最后一列就是上面说的那句「约定」；
+那一列是空的，说明这段内容不在任何文件里（栈、堆就是这样）。
 
 现在「地址空间」这个概念有了：它不是一整块，是一列区间；区间是登记出来的，
 不是读出来的；同一份内容可以在几十个进程之间共用。

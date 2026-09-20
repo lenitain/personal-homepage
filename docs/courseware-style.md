@@ -150,7 +150,8 @@
 ### 1.8 讲义形态
 
 - 演示模式：一页 = 一屏，用键盘翻
-- 版式语汇在 `.course.typ`：`title` / `slide` / `note` / `punch` / `cols` / `ask` / `lab` / `oops`
+- 版式语汇在 `content/.course.typ`（所有课件共用一份，放在 content 根上）：
+  `title` / `slide` / `note` / `punch` / `cols` / `ask` / `lab` / `oops`
 - 行内强调用**单星号** `*这样*`；多星号 `**` 是 markdown 习惯，仓库里的 lint 会抓
 - 标题用 `=`，不要 `##`
 
@@ -352,7 +353,7 @@
 
 **HTML 导出会丢弃二维摆放原语。** `grid` / `place` / `columns` / `rect` / `line` / `stack` / `align` / `v` 全部被忽略并报警告。所以排版不能写在 typst 里。
 
-分工是：**typst 说「这是什么」，CSS 说「它长什么样、放在哪」。** `.course.typ` 负责前一半（用 `html.elem` 交出带 class 的 HTML），`DocumentView.svelte` 负责后一半。
+分工是：**typst 说「这是什么」，CSS 说「它长什么样、放在哪」。** `content/.course.typ` 负责前一半（用 `html.elem` 交出带 class 的 HTML），`DocumentView.svelte` 负责后一半。
 
 **HTML 导出没有「页」的概念。** `#set page(...)` 和 `#pagebreak()` 都是摆放原语，会被丢弃。讲义的分页靠 CSS 的 `scroll-snap`，每张 `c-slide` 撑满一屏。要真分页只能打印。
 

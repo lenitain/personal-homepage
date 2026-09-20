@@ -1,4 +1,4 @@
-#import ".course.typ": title, ask, lab, oops, note, punch, cols
+#import "../../.course.typ": title, ask, lab, oops, note, punch, cols
 #import ".syllabus.typ": chapterRef
 
 #set document(title: "谁来释放资源")

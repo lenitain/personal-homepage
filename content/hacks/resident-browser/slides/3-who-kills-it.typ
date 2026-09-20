@@ -1,4 +1,4 @@
-#import "../.course.typ": cols, note, punch, slide, title
+#import "../../../.course.typ": cols, note, punch, slide, title
 
 #set document(title: "谁来释放资源（讲义）")
 

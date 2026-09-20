@@ -1,4 +1,4 @@
-#import "../.course.typ": note, punch, slide, title
+#import "../../../.course.typ": note, punch, slide, title
 #import "../.syllabus.typ": chapterRef
 
 #set document(title: "什么该留在 RAM（讲义）")
@@ -14,10 +14,28 @@
 ]
 
 #slide[
-  = 把浏览器的数据不应该全部放进 RAM
+  = 浏览器的数据不应该全部放进 RAM
+
+  浏览器常驻之后，一个很自然的下一步是：把它的数据也放进 RAM。
+
+  但「搬进内存更快」这个直觉，建立在一条假设上：文件在磁盘上，读它就要读盘；
+  而内存占着就是占着。这条假设*两半都不成立*。
+]
+
+#slide[
+  = 文件页是借来的，tmpfs 页是钉死的
 
   内核本来就会把读过的文件页留在内存里 —— 放在磁盘上，不等于每次都读盘。
-  而 tmpfs 里的页没有持久化存储机制，tmpfs 在文件系统被卸载时自然丢失。
+  而且那些页随时收得回来：磁盘上那一份还在，下次读再拿。
+
+  tmpfs 的页没有这一份。内存不够的时候，内核要么把它换回磁盘
+  （那就等于绕一圈又回到磁盘），要么*把正在写它的人杀掉*。
+
+  #note[
+    现场跑：`./docs/labs/resident-browser/16-page-cache.sh`、
+    `17-tmpfs-not-reclaimable.sh` —— 后者把 swap 一起关掉，
+    看的才是「这一页有没有地方可去」。
+  ]
 ]
 
 #slide[

@@ -1,4 +1,4 @@
-#import "../.course.typ": note, punch, slide, title
+#import "../../../.course.typ": note, punch, slide, title
 
 #set document(title: "什么样的程序值得常驻（讲义）")
 
@@ -9,7 +9,7 @@
 #slide[
   #title[什么样的程序值得常驻]
 
-  序把那 1.2–1.9 秒切成了两段，两段都跟要打开的页面无关。
+  上一章把那 1.2–1.9 秒切成了两段，两段都跟要打开的页面无关。
 
   *那么，这两段能不能只付一次？*
 ]

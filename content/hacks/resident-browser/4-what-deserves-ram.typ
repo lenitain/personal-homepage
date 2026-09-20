@@ -1,4 +1,4 @@
-#import ".course.typ": title, lab, note, oops, punch
+#import "../../.course.typ": title, lab, note, oops, punch
 #import ".syllabus.typ": chapterRef
 
 #set document(title: "什么该留在 RAM")
@@ -86,7 +86,7 @@
 #lab("演示 17：同一个笼子里，哪些页内核动得了")[
   ```sh
   $ ./17-tmpfs-not-reclaimable.sh
-    三个用例关在同一个 64 MiB 的 cgroup 里，每个都要动 256 MiB 数据。
+    三个用例关在同一个 64 MiB 的 cgroup 里（swap 也关掉），每个都要动 256 MiB 数据。
 
       A  写一个 256 MiB 的普通文件      → 写完了（脏页写回磁盘就腾出了地方）
       B  读一个 256 MiB 的文件          → 读得下去（页随时可以回收，再读回来就是）
@@ -97,11 +97,19 @@
   文件页有（磁盘上那一份），tmpfs 页没有 —— 所以内核腾不出地方，
   只能把写它的人杀掉。注意失败方式：不是「慢」，是*写到一半被杀*。
 
+  #note[
+    笼子把 swap 也关了，这一条才是干净的：tmpfs 的页是匿名页，
+    有 swap 的时候内核换得出去 —— 那等于把「留在内存里」偷偷变回「写回磁盘」，
+    只是路更绕。这里要看的只是「这一页有没有地方可去」，所以先把 swap 拿掉。
+    每个用例输出的第一行都会把这个笼子的上限和 swap 状态打出来。
+  ]
+
   （完整脚本：`./docs/labs/resident-browser/17-tmpfs-not-reclaimable.sh`）
 ]
 
 于是「把整个 profile 拷到 tmpfs 上」这件事的代价清楚了：
-你不是让它更快，是把它从「可回收」改成了「钉死的」。
+你不是让它更快，是把它从「可回收」改成了「只能占着」——
+有 swap 的话，内核最后还是得把它换回磁盘上去，只是路更绕。
 
 = 4. profile：只留这一次写下的那部分
 

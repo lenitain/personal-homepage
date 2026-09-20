@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { access, readFile } from 'node:fs/promises';
+import { access, readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { CONTENT_DIR } from './content-dir.server';
 import { renderTypstDocument } from './typst-compile';
@@ -288,5 +288,280 @@ describe('导航的单一真相源', () => {
 		for (const entry of numbered) {
 			expect(index, `入口不该手打《${entry.title}》`).not.toContain(`《${entry.title}》`);
 		}
+	});
+});
+
+/** 抽出标题文本。讲义里的标题缩进两层，所以行首允许空白。 */
+function headings(source: string): string[] {
+	return [...source.matchAll(/^\s*=+ (.+)$/gm)].map((match) => match[1].trim());
+}
+
+/**
+ * 骨架：每一章要读起来是一条线，不是一份实验报告。
+ *
+ * 这一组来自一次真实的返工。第 4 章原来的节序是「1. 方法（含小节「延迟」）→
+ * 2. 延迟 → 3. 系统调用 → 4. Python → 5. 我选了什么 → 6. 那个 bug → 7. 结论」：
+ * 两个「延迟」挨着重名；机制那一段（动态链接器）埋在标题叫「延迟」的节里；
+ * 而「抓出一个真 bug」是附录，却夹在决定和结论中间，把这条线截断了。
+ * 这些在页面上全都看得出来，但没有任何东西会因此报错 —— 所以钉在这里。
+ */
+describe('章节骨架', () => {
+	test('同一份文件里没有重名标题', async () => {
+		const problems: string[] = [];
+
+		for (const entry of all) {
+			for (const name of [entry.file, entry.slide]) {
+				const source = await readFile(join(COURSE_DIR, name), 'utf-8');
+				const seen = new Set<string>();
+
+				for (const heading of headings(source)) {
+					if (seen.has(heading)) problems.push(`${name}: 「${heading}」出现了两次`);
+					seen.add(heading);
+				}
+			}
+		}
+
+		expect(problems.join('\n')).toBe('');
+	});
+
+	test('每一章的节号从 1. 连续排到 n.，没有跳号', async () => {
+		const problems: string[] = [];
+
+		for (const entry of all) {
+			const source = await readFile(join(COURSE_DIR, entry.file), 'utf-8');
+			const numbers = [...source.matchAll(/^= (\d+)\./gm)].map((match) => Number(match[1]));
+			const wanted = numbers.map((_, index) => index + 1);
+
+			if (numbers.join(',') !== wanted.join(',')) {
+				problems.push(`${entry.file}: 节号是 ${numbers.join(' ')}`);
+			}
+		}
+
+		expect(problems.join('\n')).toBe('');
+	});
+
+	/**
+	 * 讲义的最后一张要是结论。另外四份都以 `#punch` 收尾，而第 4 章曾经停在
+	 * 「选 C，musl，静态」—— 讲完了决定，但没落地。
+	 */
+	test('每份讲义的最后一张是结论', async () => {
+		const problems: string[] = [];
+
+		for (const entry of all) {
+			const source = await readFile(join(COURSE_DIR, entry.slide), 'utf-8');
+			const lastSlide = source.slice(source.lastIndexOf('#slide['));
+
+			if (!lastSlide.includes('#punch[')) problems.push(`${entry.slide}: 最后一张没有 #punch`);
+		}
+
+		expect(problems.join('\n')).toBe('');
+	});
+});
+
+/**
+ * 讲义与正文讲的必须是同一样东西。
+ *
+ * 「讲义缺信息」这件事没有单一的症状：引一个没介绍过的概念、指一支打不出这个数的
+ * 脚本、把正文的读数抄成另一次运行的读数 —— 三种都发生过，而且都只有听众会发现。
+ */
+describe('讲义与正文引的是同一样东西', () => {
+	test('正文和讲义里引的实验脚本都在磁盘上', async () => {
+		const labs = join(process.cwd(), 'docs', 'labs', 'resident-browser');
+		const missing: string[] = [];
+
+		for (const entry of all) {
+			for (const name of [entry.file, entry.slide]) {
+				const source = await readFile(join(COURSE_DIR, name), 'utf-8');
+
+				for (const match of source.matchAll(/docs\/labs\/resident-browser\/([\w.-]+\.sh)/g)) {
+					try {
+						await access(join(labs, match[1]));
+					} catch {
+						missing.push(`${name} → ${match[1]} 不存在`);
+					}
+				}
+			}
+		}
+
+		expect(missing.join('\n')).toBe('');
+	});
+
+	/**
+	 * 演示 07 的那两个数（静态 / 动态）会随机器动，所以正文和讲义必须引**同一次
+	 * 运行**的读数 —— 否则听众在讲义上看到的和读到的对不上。曾经就这样：
+	 * 正文 372 / 495，讲义 381 / 519。
+	 */
+	test('演示 07 的读数：正文和讲义是同一组，而且跟差值自洽', async () => {
+		const pick = (source: string) => {
+			const match = source.match(/静态\s*(\d+)\s*µs[、，,]\s*动态\s*(\d+)\s*µs/);
+			return match ? { slow: Number(match[2]), fast: Number(match[1]) } : null;
+		};
+
+		const [doc, deck] = await Promise.all(
+			['5-what-to-write-it-in.typ', 'slides/5-what-to-write-it-in.typ'].map((name) =>
+				readFile(join(COURSE_DIR, name), 'utf-8')
+			)
+		);
+
+		const pair = pick(doc);
+		expect(pair, '正文里要贴演示 07 的两个读数').not.toBeNull();
+		expect(pick(deck), '讲义要引同一组读数（不是另一次运行的）').toEqual(pair);
+		expect(Number(doc.match(/多出来的\s*(\d+)\s*µs/)?.[1]), '差值是那两个数之差').toBe(
+			pair!.slow - pair!.fast
+		);
+	});
+
+	/**
+	 * 那一张对比表是这一章要讲的东西本身，所以它整张进了讲义 ——
+	 * 也正因为如此，它必须跟正文那两张表是同一批数，不能各写各的。
+	 */
+	test('讲义里那张对比表，跟正文的两张表是同一批数', async () => {
+		const [doc, deck] = await Promise.all(
+			['5-what-to-write-it-in.typ', 'slides/5-what-to-write-it-in.typ'].map((name) =>
+				readFile(join(COURSE_DIR, name), 'utf-8')
+			)
+		);
+
+		/** 正文里贴的两份输出：延迟（绑核最小值）和系统调用 / 地址空间。 */
+		const latency = new Map<string, string>(
+			[...doc.matchAll(/^\s+(qb-open-[\w-]+)\s+min=([\d.]+)/gm)].map(
+				(match) => [match[1] ?? '', match[2] ?? ''] as const
+			)
+		);
+		const runtime = new Map<string, { syscalls: string; vma: string }>(
+			[
+				...doc.matchAll(/^\s+(qb-open-[\w-]+)\s+p50=[\d.]+\s+syscalls=(\d+)\s+vma=(\d+)/gm)
+			].map((match) => [
+				match[1] ?? '',
+				{ syscalls: match[2] ?? '', vma: match[3] ?? '' }
+			] as const)
+		);
+		/** 体积那列是 strip 之后的字节数（正文贴的是原始字节，讲义换成 KB / MB）。 */
+		const sizes = new Map<string, number>(
+			[...doc.matchAll(/^\s+ok\s+(qb-open-[\w-]+)\s+as-built=\d+\s+stripped=(\d+)/gm)].map(
+				(match) => [match[1] ?? '', Number(match[2])] as const
+			)
+		);
+
+		const rows = [
+			...deck.matchAll(
+				/\[`(qb-open-[\w-]+)`\], \[[^\]]*\], \[([\d.]+)\], \[(\d+)\], \[(\d+)\], \[([\d.]+) (KB|MB)\]/g
+			)
+		];
+		const problems: string[] = [];
+
+		for (const [, name = '', min = '', syscalls = '', vma = '', size = '', unit = ''] of rows) {
+			if (latency.get(name) !== min) {
+				problems.push(`${name}: 讲义写延迟 ${min}，正文是 ${latency.get(name)}`);
+			}
+
+			const want = runtime.get(name);
+			if (!want) problems.push(`${name}: 正文的系统调用表里没有这一行`);
+			else if (want.syscalls !== syscalls || want.vma !== vma) {
+				problems.push(
+					`${name}: 讲义写 ${syscalls} 次调用 / ${vma} 个 VMA，正文是 ${want.syscalls} / ${want.vma}`
+				);
+			}
+
+			const bytes = sizes.get(name);
+			const scale = unit === 'MB' ? 1_000_000 : 1000;
+			// 讲义把字节数换成人看的单位，写几位小数就按几位判舍入：
+			// 「15 KB」允许 14.5–15.5（正文是 14632 字节），「8.9 KB」只允许 ±0.05。
+			const decimals = size.includes('.') ? (size.split('.')[1] ?? '').length : 0;
+			const tolerance = 0.5 * 10 ** -decimals;
+			if (bytes === undefined) problems.push(`${name}: 正文的体积表里没有这一行`);
+			else if (Math.abs(Number(size) - bytes / scale) > tolerance) {
+				problems.push(`${name}: 讲义写 ${size} ${unit}，正文是 ${bytes} 字节`);
+			}
+		}
+
+		expect(runtime.size, '正文里那张系统调用表应当有九行').toBe(9);
+		expect(rows.length, '讲义那张表要覆盖到九个实现').toBe(runtime.size);
+		expect(latency.size, '正文的两张表行数要对得上').toBe(runtime.size);
+		expect(sizes.size, '正文的体积表也要有九行').toBe(runtime.size);
+		expect(problems.join('\n')).toBe('');
+	});
+
+	/**
+	 * 缩写不许裸用 —— 判的是**同一张幻灯片 / 同一节**，不是整份文件。
+	 *
+	 * 这条的起因很直接：讲义那张对比表新加了一列 `VMA`，然后有人问「vma 是什么」。
+	 * 表格里、表旁边的注里都没有一句话说它是什么 —— 而这份讲义别处确实写着
+	 * 「地址空间里 9 个区间」，所以「整份文件里出现过『区间』」那种松判法挡不住它。
+	 * 缩写对作者是常识，对听众是一堵墙。
+	 */
+	test('用 VMA 的那一块内容里，得说明它是什么', async () => {
+		const names = [
+			...new Set([
+				...all.flatMap((entry) => [entry.file, entry.slide]),
+				'index.typ',
+				'slides/index.typ'
+			])
+		];
+		const problems: string[] = [];
+
+		for (const name of names) {
+			const source = await readFile(join(COURSE_DIR, name), 'utf-8');
+			// 讲义按 `#slide[` 一张一张切，正文按 `= ` 一节一节切。
+			const blocks = source.split(name.startsWith('slides/') ? '#slide[' : /^= /m);
+
+			for (const block of blocks) {
+				if (/\bVMA\b/.test(block) && !/虚拟内存区域|virtual memory area|区间/.test(block)) {
+					problems.push(`${name}: 有一块内容用了 VMA，却没在同一张 / 同一节里说它是什么`);
+				}
+			}
+		}
+
+		expect(problems.join('\n')).toBe('');
+	});
+
+	test('引用 377.6 的地方同时给出它的口径', async () => {
+		const problems: string[] = [];
+
+		for (const entry of [all[0], ...numbered]) {
+			for (const name of [entry.file, entry.slide]) {
+				const source = await readFile(join(COURSE_DIR, name), 'utf-8');
+				if (!source.includes('377.6')) continue;
+				if (!/最小值|绑核/.test(source)) problems.push(`${name}: 用了 377.6 却没说它是绑核最小值`);
+			}
+		}
+
+		expect(problems.join('\n')).toBe('');
+	});
+
+	/**
+	 * 实验脚本开头那行「对应《某章》第 N 节「标题」」。
+	 *
+	 * 章节里加一节、挪一节，这些行就悄悄指错了地方 —— 已经错过一次：
+	 * 第 2 章开头补了「父进程死了子进程不会跟着死」之后，所有节号顺延，
+	 * 而 `14-identity-channels.sh` 还写着「第 4 节」。它在 `docs/` 里，
+	 * 没有任何页面对得出来。
+	 */
+	test('实验脚本指的那一节，标题真的在那一节里', async () => {
+		const labs = join(process.cwd(), 'docs', 'labs', 'resident-browser');
+		const problems: string[] = [];
+
+		for (const name of (await readdir(labs)).filter((file) => file.endsWith('.sh'))) {
+			const source = await readFile(join(labs, name), 'utf-8');
+			const ref = source.match(/对应《(.+?)》第 (\d+) 节「(.+?)」/);
+			if (!ref) continue;
+
+			const [, title, section, heading] = ref;
+			// 脚本里允许用章标题的简称（序的标题带着「，我该怎么办？」那一问）。
+			const entry = all.find((item) => item.title.startsWith(title));
+			if (!entry) {
+				problems.push(`${name}: 引的《${title}》不是任何一章的标题`);
+				continue;
+			}
+
+			const chapter = await readFile(join(COURSE_DIR, entry.file), 'utf-8');
+			const target = chapter.split(/^= /m).find((part) => part.startsWith(`${section}. `));
+			if (!target) problems.push(`${name}: ${entry.file} 里没有第 ${section} 节`);
+			else if (!target.includes(heading)) {
+				problems.push(`${name}: 《${title}》第 ${section} 节里没有「${heading}」`);
+			}
+		}
+
+		expect(problems.join('\n')).toBe('');
 	});
 });

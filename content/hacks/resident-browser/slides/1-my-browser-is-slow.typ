@@ -1,4 +1,4 @@
-#import "../.course.typ": cols, note, punch, slide, title
+#import "../../../.course.typ": cols, note, punch, slide, title
 
 #set document(title: "我的 qutebrowser 启动好慢，我该怎么办？（讲义）")
 

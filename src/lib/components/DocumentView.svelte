@@ -524,7 +524,7 @@
 	/*
 	 * 这套规则的存在理由：typst 的 HTML 导出丢掉一切二维摆放，所以版面只能在
 	 * CSS 这一层做。反过来说，能做到的事一点不少 —— 内容侧用 `html.elem` 交出
-	 * 带 class 的结构（见 content/hacks/resident-browser/.course.typ），
+	 * 带 class 的结构（见 content/.course.typ），
 	 * 网格、分栏、重量差异全在这里实现。
 	 *
 	 * 按**重量**分档，而不是按颜色分类：提问比正文重、实验是中性的记录、

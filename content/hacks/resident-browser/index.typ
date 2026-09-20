@@ -1,4 +1,4 @@
-#import ".course.typ": title, ask, lab, oops, note, punch, cols
+#import "../../.course.typ": title, ask, lab, oops, note, punch, cols
 #import ".syllabus.typ": preface, chapters, chapterRef, prefaceRef, contents
 
 #set document(title: "一个已经开着的浏览器")
@@ -29,7 +29,8 @@ qutebrowser 启动要 1.2 到 1.9 秒。窗口先出来，然后页面才出来�
 三次，我都是拿脑子里的模型代替了观测：
 
 -   常驻开销我记成「700 MB 到 1 GB」，量出来是一百多 MiB（#chapterRef("1.")）
--   我以为「多语言实现」的价值在对比表，实际价值在它抓出来的一个内存越界写（#chapterRef("4.")）
+-   我以为一段「一直能用」的代码就是对的，它其实一直在缓冲区外面写 ——
+    露出来，只是因为同一个行为被写了两遍（#chapterRef("4.")）
 -   一个实验「跑通了」但其实完全无效，因为 `$$` 被 systemd 展开成了字面 `$`（#chapterRef("2.")）
 
 这三个不是独立的事故，是同一种失误的三个变体。

@@ -1,0 +1,30 @@
+// 一场 talk 的演示会话：一个 pane 一个 worktree，一个 worktree 一个 agent。
+//
+// 用法（从 hub 仓库里起，会话的 cwd 就是 hub）：
+//
+//     zellij --new-session-with-layout agents.kdl
+//
+// 前提是三个 worktree 已经建好，而且跟 hub 是兄弟目录：
+//
+//     git worktree add ../wt-api -b feat/api
+//     git worktree add ../wt-web -b feat/web
+//     git worktree add ../wt-db  -b feat/db
+//
+// `cwd` 是相对**会话的 cwd** 解析的（不是相对这个文件）—— 所以上面那句必须
+// 从 hub 里发。`command` 和 `args` 分开写：args 是逐个子参数，不要塞成一个字符串。
+//
+// 把 pi 换成任何能非交互跑一轮的 agent 都成立 —— 这个文件不关心是哪一个。
+
+layout {
+    pane split_direction="vertical" {
+        pane name="api" cwd="../wt-api" command="pi" {
+            args "-p" "把后端的页码分页改成游标分页"
+        }
+        pane name="web" cwd="../wt-web" command="pi" {
+            args "-p" "把列表页接上新的游标分页接口"
+        }
+        pane name="db" cwd="../wt-db" command="pi" {
+            args "-p" "写一笔把 schema 迁到 v2 的迁移"
+        }
+    }
+}
