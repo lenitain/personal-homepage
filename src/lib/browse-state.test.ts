@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'vitest';
 import {
+	MOVE_HISTORY_WINDOW_MS,
 	browseStateOf,
 	browseStateToSearch,
 	directoryAncestors,
 	parseBrowseState,
-	resolveBrowseState
+	resolveBrowseState,
+	shouldCreateHistoryEntry
 } from './browse-state';
 import type { FsEntry } from './types';
 
@@ -208,5 +210,31 @@ describe('往返', () => {
 		const state = browseStateOf('blog/why-yazi.md', ['projects', 'blog']);
 
 		expect(browseStateToSearch(state)).toBe(browseStateToSearch(state));
+	});
+});
+
+describe('shouldCreateHistoryEntry', () => {
+	const now = 10_000;
+
+	test('确认打开（点击 / Enter）永远新开一条', () => {
+		expect(shouldCreateHistoryEntry('push', now, now - 1)).toBe(true);
+		expect(shouldCreateHistoryEntry('push', now, now)).toBe(true);
+	});
+
+	test('视图偏好（开合目录）从不新开', () => {
+		expect(shouldCreateHistoryEntry('replace', now, now - 1)).toBe(false);
+		expect(shouldCreateHistoryEntry('replace', now, 0)).toBe(false);
+	});
+
+	test('浏览移动：距上次新开不足一个窗口 → 并进上一条', () => {
+		expect(shouldCreateHistoryEntry('move', now, now - MOVE_HISTORY_WINDOW_MS + 1)).toBe(false);
+		expect(shouldCreateHistoryEntry('move', now, now - 1)).toBe(false);
+	});
+
+	test('浏览移动：停够一个窗口 → 新开一条', () => {
+		expect(shouldCreateHistoryEntry('move', now, now - MOVE_HISTORY_WINDOW_MS)).toBe(true);
+		// lastPushAt = 0 表示「还没推送过」；真实时钟的 Date.now() 远大于窗口，
+		// 所以加载后的第一次移动必然新开一条，把落地页留在历史里。
+		expect(shouldCreateHistoryEntry('move', now, 0)).toBe(true);
 	});
 });

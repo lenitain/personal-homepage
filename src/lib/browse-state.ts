@@ -34,12 +34,44 @@ import type { FsEntry } from './types';
  *
  * 解析、编码、按树校验、推祖先都不碰 DOM、不碰 history，所以能直接单测；改地址栏那步
  * 留在 `+page.svelte` 里。URL 是外部输入（几个月前的书签、别人手改过的链接），所以
- * 校验一律「不认识就丢」，绝不抛错。
+ * 校验一律「不认识就丢」，绝不抛错。唯一不碰 URL 本身的是 {@link shouldCreateHistoryEntry}
+ * —— 它只回答「这次该新开历史记录还是并进上一条」，同样是纯函数。
  */
 
 /** URL 里那两个参数名。改这里就是改地址栏的形状。 */
 const FILE_PARAM = 'file';
 const DIRS_PARAM = 'dirs';
+
+export type HistoryWrite = 'push' | 'replace' | 'move';
+
+/**
+ * ↑/↓ 连续浏览时，两次新开历史记录之间至少隔多久（毫秒）。
+ * 见 {@link shouldCreateHistoryEntry}。
+ */
+export const MOVE_HISTORY_WINDOW_MS = 1000;
+
+/**
+ * 这次写地址栏，要不要往浏览器历史里**新开**一条（false = 并进当前这条，replace）。
+ *
+ * - `'push'`：确认打开（点击 / Enter）。明确去了一个地方，永远新开，后退键
+ *   才能回到上一篇；
+ * - `'replace'`：开合目录这类视图偏好，从不新开（理由见模块注释）；
+ * - `'move'`：↑/↓「选中即打开」的连续浏览。按住方向键会走出十几步，每步都
+ *   push 会让后退键变成按步数收费；距上次新开不足 `MOVE_HISTORY_WINDOW_MS`
+ *   就并进上一条 —— 「在一个地方停留够久 = 一次到访」。
+ *
+ * `lastPushAt = 0` 表示还没推送过：真实时钟的 `Date.now()` 远大于窗口，
+ * 所以加载后的第一次移动必然新开一条，落地页不会被吞掉。
+ */
+export function shouldCreateHistoryEntry(
+	write: HistoryWrite,
+	now: number,
+	lastPushAt: number
+): boolean {
+	if (write === 'push') return true;
+	if (write === 'replace') return false;
+	return now - lastPushAt >= MOVE_HISTORY_WINDOW_MS;
+}
 
 /** URL 里记着的浏览位置。 */
 export interface BrowseState {

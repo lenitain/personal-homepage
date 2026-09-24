@@ -7,14 +7,18 @@
 	import ContentPane from '$lib/components/ContentPane.svelte';
 	import Status from '$lib/components/Status.svelte';
 	import { findFileTreeEntry, flattenFileTree } from '$lib/file-tree';
+	import { PAGE_STEP, arrowLeft, arrowRight, stepCursorPath, typeAheadPath } from '$lib/tree-nav';
 	import { isPresenting } from '$lib/presentation';
 	import { isTextEntryTarget } from '$lib/text-entry';
 	import {
 		browseStateOf,
 		browseStateToSearch,
 		parseBrowseState,
-		resolveBrowseState
+		resolveBrowseState,
+		shouldCreateHistoryEntry
 	} from '$lib/browse-state';
+	import type { ArrowLeftIntent, ArrowRightIntent } from '$lib/tree-nav';
+	import type { HistoryWrite } from '$lib/browse-state';
 	import type { FsEntry } from '$lib/types';
 
 	let { data } = $props();
@@ -41,8 +45,24 @@
 	 * 后退/前进改，不该再跟着 props 变。
 	 */
 	const expandedPaths = new SvelteSet<string>(untrack(() => data.initialExpanded));
-	/** 光标：键盘现在停在哪一行。跟右栏显示哪一篇是两件事。 */
-	let cursorPath = $state<string | null>(null);
+
+	/** 拍平后的可见行 —— 渲染与键盘导航共用同一份顺序；声明在光标之前，初始化时要用。 */
+	let rows = $derived(flattenFileTree(tree, expandedPaths));
+
+	/** 光标只允许停在看得见的行上：路径不在可见行里（树空、文档藏在折叠目录里）就是 null。 */
+	function visibleCursorPath(path: string | null): string | null {
+		return path && rows.some((row) => row.entry.path === path) ? path : null;
+	}
+
+	/**
+	 * 光标：键盘停在哪一行，也是「选中即所见」里的那个「选中」——
+	 * 停在文件行上时右栏显示的就是它（编辑器式的「光标 ≠ 打开」两态在这里合一，
+	 * 于是 readme 不再需要教人「按 Enter 才真的打开」）；停在目录行上时右栏保持
+	 * 上一篇不动 —— 目录没有内容可预览。首屏指向正在读的那篇，一进站高亮就在它身上。
+	 */
+	let cursorPath = $state<string | null>(
+		untrack(() => visibleCursorPath(data.restoredFile ?? data.defaultPath))
+	);
 	/**
 	 * 地址栏指名的那一篇。真相来源是 URL，不是组件内存 —— 点击只是改 URL，右栏跟着走。
 	 * 这一份是服务端按树校验过的；URL 什么都没说时是 null。同上的「只取一次」。
@@ -60,7 +80,6 @@
 	/** 窄边条的提示文字，跟着开合状态走。 */
 	let sidebarToggleLabel = $derived(sidebarOpen ? '收起文件树' : '展开文件树');
 
-	let rows = $derived(flattenFileTree(tree, expandedPaths));
 	let openEntry = $derived(openPath ? findFileTreeEntry(tree, openPath) : null);
 
 	// Randomize seeds once per page load (refresh = new board)
@@ -72,12 +91,18 @@
 		sidebarOpen = !sidebarOpen;
 	}
 
+	/** 上一次往历史里新开一条的时刻（`Date.now()`）；0 = 还没开过。见 shouldCreateHistoryEntry。 */
+	let lastPushAt = 0;
+
 	/**
-	 * 把当前浏览位置写回地址栏。
+	 * 把当前浏览位置写回地址栏。`write` 决定历史记录的粒度
+	 * （依据见 `shouldCreateHistoryEntry` 的文档）：
 	 *
-	 * 点开一篇文档 = `pushState`：「去了一个地方」，后退键该回到上一篇。
-	 * 开合目录 = `replaceState`：那是视图偏好，不该往历史里塞记录 —— 否则点开五个文件夹、
-	 * 再想后退回上一篇文章，得按七次。
+	 * - `'push'` …… 点击 / Enter 确认打开：无条件新开一条，后退键回到上一篇；
+	 * - `'replace'` …… 开合目录：视图偏好，绝不往历史里塞记录 —— 否则点开五个
+	 *   文件夹、再想后退回上一篇文章，得按七次；
+	 * - `'move'` …… ↑/↓ 选中即打开的连续浏览：停留不足一秒就并进上一条，
+	 *   按住方向键翻十几篇文章不会把历史撑爆。
 	 *
 	 * 用原生 History API，而不是 `$app/navigation` 的同名函数：SvelteKit 的 `pushState`
 	 * 只写 `history.state`，不更新 `page.url`，而且那份 state 刷新后不会被应用（官方文档
@@ -85,12 +110,16 @@
 	 * 是那份持久化存储。我们插进去的记录不带 SvelteKit 的记账，它的路由器会走 popstate
 	 * 的兜底分支，不会为此重跑 `load`（正文是整体内联的，重跑一次就是重传整站内容）。
 	 */
-	function syncUrl(createHistoryEntry: boolean) {
+	function syncUrl(write: HistoryWrite) {
 		const url = `${location.pathname}${browseStateToSearch(browseStateOf(urlFile, expandedPaths))}`;
 		if (url === `${location.pathname}${location.search}`) return;
 
-		if (createHistoryEntry) history.pushState(null, '', url);
-		else history.replaceState(null, '', url);
+		if (shouldCreateHistoryEntry(write, Date.now(), lastPushAt)) {
+			history.pushState(null, '', url);
+			lastPushAt = Date.now();
+		} else {
+			history.replaceState(null, '', url);
+		}
 	}
 
 	/** 整份换掉展开集合 —— 后退/前进要复原的是「那时开着哪些文件夹」，不是增量。 */
@@ -109,50 +138,87 @@
 		const restored = resolveBrowseState(tree, parseBrowseState(location.search));
 		urlFile = restored.file;
 		replaceExpanded(restored.expanded);
+		// 后退 / 前进要连光标一起复原：回到哪篇，高亮就落回哪篇
+		cursorPath = visibleCursorPath(restored.file ?? data.defaultPath);
 	}
 
-	function toggleDirectory(entry: FsEntry) {
-		if (!expandedPaths.has(entry.path)) {
-			expandedPaths.add(entry.path);
+	/**
+	 * 开合一个目录。方向由 `expandedPaths` 里「现在有没有它」决定，所以
+	 * ←/→ 算出来的「展开 / 收起」意图和单击一行走的是同一条路。
+	 * 开合是视图偏好，写地址栏走 `replace`，不进历史。
+	 */
+	function toggleDirectory(path: string) {
+		if (!expandedPaths.has(path)) {
+			expandedPaths.add(path);
 		} else {
-			expandedPaths.delete(entry.path);
+			expandedPaths.delete(path);
 			// 光标不能悬在一个刚被收起、已经看不见的节点上
-			if (cursorPath?.startsWith(`${entry.path}/`)) {
-				cursorPath = entry.path;
+			if (cursorPath?.startsWith(`${path}/`)) {
+				cursorPath = path;
 			}
 		}
 
-		syncUrl(false);
+		syncUrl('replace');
 	}
 
-	/** 单击一行：目录就展开/收起，文件就打开。两种情况都把光标带过去。 */
+	/**
+	 * 确认打开一行（点击 / Enter）：目录就展开/收起，文件就打开，两种情况都把光标带过去。
+	 * 与 ↑/↓ 的「选中即预览」（setCursor）相比，这是明确的意图：新开一条历史记录，
+	 * 窄屏下打开文件还顺手收起盖在正文上的浮层树。
+	 */
 	function activateEntry(entry: FsEntry) {
 		cursorPath = entry.path;
 		if (entry.type === 'dir') {
-			toggleDirectory(entry);
+			toggleDirectory(entry.path);
 			return;
 		}
 
 		urlFile = entry.path;
-		// 窄屏下树是浮层：选完文章就收起来，不然文章还被盖着
+		// 窄屏下树是浮层：确认打开文章就收起来，不然文章还被盖着
 		if (narrowViewport) sidebarOpen = false;
-		syncUrl(true);
+		syncUrl('push');
 	}
 
+	/**
+	 * 把光标落到某一行 —— 键盘导航的唯一出口，「选中即所见」在这里实现：
+	 * 落在文件行上就顺手打开它，并按 `write` 的等级写地址栏；落在目录行上只移动
+	 * 高亮，右栏保持上一篇（目录没有内容可看），URL 不动。
+	 */
+	function setCursor(path: string, write: HistoryWrite) {
+		// 落点就是现在这行（比如在最后一行还按 ↓、首字母只有自己匹配）：什么都没发生，
+		// 不写 URL、不动历史 —— 否则一次原地不动会凭空 push 出一条 ?file= 记录
+		if (path === cursorPath) return;
+
+		cursorPath = path;
+		const row = rows.find((candidate) => candidate.entry.path === path);
+		if (row?.entry.type !== 'file') return;
+
+		urlFile = path;
+		// 窄屏下不收起树：连续 ↑/↓ 浏览时浮层反复出没，比盖住正文更烦人。
+		// 收起只发生在「确认打开」（点击 / Enter）的 activateEntry 里。
+		syncUrl(write);
+	}
+
+	/** ↑/↓、PageUp/PageDown 的一步。落点计算在 tree-nav 里（纯函数、有单测）。 */
 	function moveCursor(step: number) {
-		if (rows.length === 0) return;
+		const next = stepCursorPath(rows, cursorPath, openPath, step);
+		if (next !== null) setCursor(next, 'move');
+	}
 
-		const current = rows.findIndex((row) => row.entry.path === cursorPath);
-		if (current === -1) {
-			// 还没有光标：第一次移动时落到正在看的那篇；没打开任何文章就落到可见行的头/尾
-			const opened = rows.findIndex((row) => row.entry.path === openPath);
-			const target = opened !== -1 ? opened : step > 0 ? 0 : rows.length - 1;
-			cursorPath = rows[target].entry.path;
-			return;
+	/** Home / End：落到可见行的头 / 尾。 */
+	function focusRowEdge(toEnd: boolean) {
+		const row = toEnd ? rows[rows.length - 1] : rows[0];
+		if (row) setCursor(row.entry.path, 'move');
+	}
+
+	/** 把 ←/→ 算出的意图落到状态上：展开/收起是视图偏好，focus 是浏览移动。 */
+	function applyArrowIntent(intent: ArrowRightIntent | ArrowLeftIntent | null) {
+		if (!intent) return;
+		if (intent.kind === 'expand' || intent.kind === 'collapse') {
+			toggleDirectory(intent.path);
+		} else {
+			setCursor(intent.path, 'move');
 		}
-
-		const next = Math.min(Math.max(current + step, 0), rows.length - 1);
-		cursorPath = rows[next].entry.path;
 	}
 
 	function activateCursor() {
@@ -172,6 +238,9 @@
 		// Enter 还会顺手打开一篇文件
 		if (isTextEntryTarget(event.target)) return;
 
+		// 带修饰键的组合让给浏览器和各处自己的快捷键（Ctrl+F 搜索、Alt+← 后退……）
+		if (event.ctrlKey || event.metaKey || event.altKey) return;
+
 		switch (event.key) {
 			case 'ArrowDown':
 				event.preventDefault();
@@ -181,10 +250,50 @@
 				event.preventDefault();
 				moveCursor(-1);
 				break;
+			case 'ArrowRight':
+				// 资源管理器约定：→ 展开折叠的目录 / 走进已展开目录的子项。
+				// 无论算不算得出意图都要 preventDefault：部分浏览器的「前进」也用 →，
+				// 树活着的时候不能被它偷走历史导航。
+				event.preventDefault();
+				applyArrowIntent(arrowRight(rows, cursorPath));
+				break;
+			case 'ArrowLeft':
+				// 同上：← 是收起 / 回父级，不是浏览器后退
+				event.preventDefault();
+				applyArrowIntent(arrowLeft(rows, cursorPath));
+				break;
+			case 'Home':
+				event.preventDefault();
+				focusRowEdge(false);
+				break;
+			case 'End':
+				event.preventDefault();
+				focusRowEdge(true);
+				break;
+			case 'PageUp':
+				event.preventDefault();
+				moveCursor(-PAGE_STEP);
+				break;
+			case 'PageDown':
+				event.preventDefault();
+				moveCursor(PAGE_STEP);
+				break;
 			case 'Enter':
 				event.preventDefault();
 				activateCursor();
 				break;
+			default: {
+				// 首字母跳转（文件管理器标配）。空格留给正文自己滚动；IME 合成中的
+				// 中间键不掺和；没匹配上就不 preventDefault，把按键还给浏览器。
+				if (event.isComposing || event.key === 'Process') break;
+				if (event.key.length !== 1 || event.key === ' ') break;
+
+				const target = typeAheadPath(rows, cursorPath, event.key);
+				if (target) {
+					event.preventDefault();
+					setCursor(target, 'move');
+				}
+			}
 		}
 	}
 
@@ -206,7 +315,7 @@
 		 * 于是访客不会停在 `/?file=已删除.md&dirs=不存在` 这种地址上。走 replaceState，
 		 * 不留一条脏历史记录。
 		 */
-		syncUrl(false);
+		syncUrl('replace');
 
 		return () => {
 			narrow.removeEventListener('change', handleViewportChange);
